@@ -5,6 +5,8 @@ const cors = require('cors');
 
 const app = express();
 
+const transactionsRouter = require('./routes/transactions');
+
 // Middlewares
 app.use(bodyParser.json());
 app.use(cors());
@@ -21,3 +23,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+app.use('/api/transactions', transactionsRouter);
