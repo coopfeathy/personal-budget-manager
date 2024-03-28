@@ -11,6 +11,8 @@ const transactionsRouter = require('./routes/transactions');
 app.use(bodyParser.json());
 app.use(cors());
 
+app.use('/api/transactions', transactionsRouter);
+
 // Connect to MongoDB
 mongoose.connect('mongodb://localhost/personalBudgetDB', {
     useNewUrlParser: true,
@@ -23,5 +25,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
-
-app.use('/api/transactions', transactionsRouter);
