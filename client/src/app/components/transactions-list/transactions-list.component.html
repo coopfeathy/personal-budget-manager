@@ -1,1 +1,7 @@
-<p>transactions-list works!</p>
+<ul>
+  <li *ngFor="let transaction of transactions">
+    {{ transaction.title }} - {{ transaction.amount }}
+    <button (click)="deleteTransaction(transaction._id)">Delete</button>
+  </li>
+</ul>
+
