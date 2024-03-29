@@ -1,1 +1,15 @@
-<p>transaction-form works!</p>
+<form #transactionForm="NgForm" (ngSubmit)="onSubmit(transactionForm)">
+  <div>
+    <label for="title">Title:</label>
+    <input type="text" id="title" name="title" ngModel required>
+  </div>
+  <div>
+    <label for="amount">Amount:</label>
+    <input type="number" id="amount" name="amount" ngModel required>
+  </div>
+  <div>
+    <label for="category">Category:</label>
+    <input type="text" id="category" name="category" ngModel required>
+  </div>
+  <button type="submit">Submit</button>
+</form>
