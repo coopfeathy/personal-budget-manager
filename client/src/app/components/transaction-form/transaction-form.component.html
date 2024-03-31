@@ -1,4 +1,4 @@
-<form #transactionForm="NgForm" (ngSubmit)="onSubmit(transactionForm)">
+<form #transactionForm="ngForm" (ngSubmit)="onSubmit(transactionForm)">
   <div>
     <label for="title">Title:</label>
     <input type="text" id="title" name="title" ngModel required>
