@@ -16,5 +16,5 @@
     <input type="text" id="category" formControlName="category">
     <div *ngIf="transactionForm.get('category').errors?.required">Category is required.</div>
   </div>
-  <button type="submit" [disabled]="!transactionForm.valid">Submit</button>
+  <button type="submit">Submit</button>
 </form>

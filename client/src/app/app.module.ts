@@ -7,6 +7,7 @@ import { AppComponent } from './app.component';
 import { TransactionsListComponent } from './components/transactions-list/transactions-list.component';
 import { TransactionFormComponent } from './components/transaction-form/transaction-form.component';
 import { TransactionDetailComponent } from './components/transaction-detail/transaction-detail.component';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 @NgModule({
   declarations: [
@@ -20,7 +21,8 @@ import { TransactionDetailComponent } from './components/transaction-detail/tran
     AppRoutingModule,
     FormsModule,
     HttpClientModule,
-    ReactiveFormsModule
+    ReactiveFormsModule,
+    BrowserAnimationsModule
   ],
   providers: [],
   bootstrap: [AppComponent]
