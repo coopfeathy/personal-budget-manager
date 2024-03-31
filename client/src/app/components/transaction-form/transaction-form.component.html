@@ -1,15 +1,20 @@
-<form #transactionForm="ngForm" (ngSubmit)="onSubmit(transactionForm)">
+<form [formGroup]="transactionForm" (ngSubmit)="onSubmit()">
   <div>
     <label for="title">Title:</label>
-    <input type="text" id="title" name="title" ngModel required>
+    <input type="text" id="title" formControlName="title">
+    <div *ngIf="transactionForm.get('title').errors?.required">Title is required.</div>
+    <div *ngIf="transactionForm.get('title').errors?.minlength">Title must be at least 3 characters long.</div>
   </div>
   <div>
     <label for="amount">Amount:</label>
-    <input type="number" id="amount" name="amount" ngModel required>
+    <input type="text" id="amount" formControlName="amount">
+    <div *ngIf="transactionForm.get('amount').errors?.required">Amount is required.</div>
+    <div *ngIf="transactionForm.get('amount').errors?.pattern">Amount must be a number.</div>
   </div>
   <div>
     <label for="category">Category:</label>
-    <input type="text" id="category" name="category" ngModel required>
+    <input type="text" id="category" formControlName="category">
+    <div *ngIf="transactionForm.get('category').errors?.required">Category is required.</div>
   </div>
-  <button type="submit">Submit</button>
+  <button type="submit" [disabled]="!transactionForm.valid">Submit</button>
 </form>

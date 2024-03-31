@@ -7,19 +7,25 @@ import { Transaction, TransactionService } from '../../services/transaction.serv
   styleUrls: ['./transactions-list.component.css']
 })
 export class TransactionsListComponent implements OnInit {
-  transactions: Transaction[] = [];
+  transactions: any[] = [];
+  currentPage = 1;
+  totalPages = 0;
 
   constructor(private transactionService: TransactionService) { }
 
   ngOnInit(): void {
-    this.transactionService.getTransactions().subscribe((transactions: Transaction[]) => {
-      this.transactions = transactions;
+    this.loadTransactions();
+  }
+
+  loadTransactions(page = 1): void {
+    this.transactionService.getTransactions(page).subscribe(data => {
+      this.transactions = data.transactions;
+      this.totalPages = data.totalPages;
+      this.currentPage = data.currentPage;
     });
   }
 
-  deleteTransaction(id: string): void {
-    this.transactionService.deleteTransaction(id).subscribe(() => {
-      this.transactions = this.transactions.filter(t => t._id !== id);
-    });
+  goToPage(page: number): void {
+    this.loadTransactions(page);
   }
 }

@@ -1,41 +1,31 @@
-import { Component, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
-import { NgForm } from '@angular/forms';
+import { Component } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { TransactionService } from '../../services/transaction.service';
-import { Location } from '@angular/common'; // For navigating back
 
 @Component({
   selector: 'app-transaction-form',
   templateUrl: './transaction-form.component.html',
-  styleUrls: ['./transaction-form.component.css']
+  //styleUrls: ['./transaction-form.component.css']
 })
-export class TransactionFormComponent implements OnInit {
-  transaction: any = {}; // Placeholder for the transaction to edit
+export class TransactionFormComponent {
+  transactionForm: FormGroup;
 
-  constructor(
-    private transactionService: TransactionService,
-    private route: ActivatedRoute,
-    private location: Location
-  ) { }
-
-  ngOnInit(): void {
-    const id = this.route.snapshot.paramMap.get('id');
-    if (id) {
-      this.transactionService.getTransaction(id).subscribe(transaction => {
-        this.transaction = transaction;
-      });
-    }
+  constructor(private fb: FormBuilder, private transactionService: TransactionService) {
+    this.transactionForm = this.fb.group({
+      title: ['', [Validators.required, Validators.minLength(3)]],
+      amount: [null, [Validators.required, Validators.pattern(/^\d+\.?\d*$/)]],
+      category: ['', Validators.required]
+    });
   }
 
-  onSubmit(form: NgForm): void {
-    if (this.transaction._id) {
-      this.transactionService.updateTransaction(this.transaction._id, form.value).subscribe(() => {
-        this.location.back(); // Navigate back after update
-      });
-    } else {
-      this.transactionService.addTransaction(form.value).subscribe(() => {
-        form.reset();
-        this.location.back(); // Navigate back after add
+  onSubmit(): void {
+    if (this.transactionForm.valid) {
+      this.transactionService.addTransaction(this.transactionForm.value).subscribe({
+        next: (result) => {
+          console.log(result);
+          this.transactionForm.reset();
+        },
+        error: (error) => console.error('There was an error!', error)
       });
     }
   }

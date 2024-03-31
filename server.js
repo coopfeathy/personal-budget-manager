@@ -14,7 +14,7 @@ app.use(cors());
 app.use('/api/transactions', transactionsRouter);
 
 // Connect to MongoDB
-mongoose.connect('mongodb://localhost/personalBudgetDB', {
+mongoose.connect('mongodb+srv://coopfeathy:dwqaLVRB43Bfn@cluster0.c0aosxz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
     useNewUrlParser: true,
     useUnifiedTopology: true
 }).then(() => console.log('MongoDB Connected'))

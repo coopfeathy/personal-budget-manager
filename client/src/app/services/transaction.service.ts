@@ -18,10 +18,9 @@ export class TransactionService {
 
   constructor(private http: HttpClient) { }
 
-  getTransactions(): Observable<Transaction[]> {
-    return this.http.get<Transaction[]>(this.apiUrl);
-  }
-
+  getTransactions(page = 1, limit = 10): Observable<any> {
+    return this.http.get(`${this.apiUrl}?page=${page}&limit=${limit}`);
+}
   getTransaction(id: string): Observable<Transaction> {
     return this.http.get<Transaction>(`${this.apiUrl}/${id}`);
   }
