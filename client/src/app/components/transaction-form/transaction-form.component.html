@@ -13,8 +13,13 @@
   </div>
   <div>
     <label for="category">Category:</label>
-    <input type="text" id="category" formControlName="category">
-    <div *ngIf="transactionForm.get('category').errors?.required">Category is required.</div>
+    <select id="category" formControlName="category" (change)="onCategoryChange($event)">
+      <option *ngFor="let category of categories" [value]="category">{{ category }}</option>
+      <option value="add-new">Add new</option>
+    </select>
+    <input *ngIf="isNewCategory" type="text" id="new-category" [(ngModel)]="newCategory" [ngModelOptions]="{standalone: true}" placeholder="New category">    <div *ngIf="transactionForm.get('category').errors?.required">Category is required.</div>
   </div>
   <button type="submit">Submit</button>
 </form>
+
+

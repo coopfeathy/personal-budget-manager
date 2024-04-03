@@ -8,24 +8,23 @@ import { Transaction, TransactionService } from '../../services/transaction.serv
 })
 export class TransactionsListComponent implements OnInit {
   transactions: any[] = [];
-  currentPage = 1;
-  totalPages = 0;
+  categories: string[] = [];
 
   constructor(private transactionService: TransactionService) { }
 
-  ngOnInit(): void {
-    this.loadTransactions();
-  }
-
-  loadTransactions(page = 1): void {
-    this.transactionService.getTransactions(page).subscribe(data => {
-      this.transactions = data.transactions;
-      this.totalPages = data.totalPages;
-      this.currentPage = data.currentPage;
+  ngOnInit() {
+    this.transactionService.getTransactions().subscribe((response: any) => {
+      if (!Array.isArray(response.transactions)) {
+        console.error('transactions is not an array:', response.transactions);
+        return;
+      }
+  
+      this.transactions = response.transactions;
+      this.categories = [...new Set(this.transactions.map(t => t.category))];
     });
   }
 
-  goToPage(page: number): void {
-    this.loadTransactions(page);
+  getTransactionsByCategory(category: string): Transaction[] {
+    return this.transactions.filter(t => t.category === category);
   }
 }

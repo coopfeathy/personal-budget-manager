@@ -1,15 +1,18 @@
 import { Component } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { TransactionService } from '../../services/transaction.service';
+import { TransactionService, Transaction } from '../../services/transaction.service';
 import { SnackbarService } from '../../services/snackbar.service';
 
 @Component({
   selector: 'app-transaction-form',
   templateUrl: './transaction-form.component.html',
-  //styleUrls: ['./transaction-form.component.css']
+  styleUrls: ['./transaction-form.component.css']
 })
 export class TransactionFormComponent {
   transactionForm: FormGroup;
+  categories: string[] = [];
+  isNewCategory = false;
+  newCategory = '';
 
   constructor(private fb: FormBuilder, private transactionService: TransactionService, private snackbarService: SnackbarService) {
     this.transactionForm = this.fb.group({
@@ -17,9 +20,26 @@ export class TransactionFormComponent {
       amount: [null, [Validators.required, Validators.pattern(/^\d+\.?\d*$/)]],
       category: ['', Validators.required]
     });
+
+    this.transactionService.getTransactions().subscribe((transactions: Transaction[]) => {
+      this.categories = [...new Set(transactions.map(t => t.category))];
+    });
+  }
+
+  onCategoryChange(event: Event) {
+    const selectElement = event.target as HTMLSelectElement;
+    if (selectElement.value === 'add-new') {
+      this.isNewCategory = true;
+      this.transactionForm.get('category').reset();
+    } else {
+      this.isNewCategory = false;
+    }
   }
 
   onSubmit(): void {
+    if (this.isNewCategory) {
+      this.transactionForm.get('category').setValue(this.newCategory);
+    }
     if (this.transactionForm.valid) {
       this.transactionService.addTransaction(this.transactionForm.value).subscribe({
         next: (result) => {

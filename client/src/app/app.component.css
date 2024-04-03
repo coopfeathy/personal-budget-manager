@@ -1,0 +1,12 @@
+nav {
+    background-color: #f8f9fa;
+    padding: 20px;
+    text-align: center;
+}
+  
+nav a {
+    font-size: 2em;
+    font-weight: bold;
+    color: #333;
+    text-decoration: none;
+}

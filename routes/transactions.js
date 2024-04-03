@@ -17,20 +17,12 @@ router.post('/', async (req, res) => {
 
 // Get all transactions
 router.get('/', async (req, res) => {
-    const { page = 1, limit = 10 } = req.query; // Default page 1 and limit 10
     try {
-        const transactions = await Transaction.find()
-                               .limit(limit * 1)
-                               .skip((page - 1) * limit)
-                               .exec();
-        const count = await Transaction.countDocuments();
-        res.json({
-            transactions,
-            totalPages: Math.ceil(count / limit),
-            currentPage: page
-        });
+        const transactions = await Transaction.find().exec();
+        res.json(transactions);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        console.error(err); // Log the error
+        res.status(500).json({ message: 'An error occurred while fetching transactions' });
     }
 });
 
