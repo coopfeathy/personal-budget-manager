@@ -20,6 +20,7 @@
     <input *ngIf="isNewCategory" type="text" id="new-category" [(ngModel)]="newCategory" [ngModelOptions]="{standalone: true}" placeholder="New category">    <div *ngIf="transactionForm.get('category').errors?.required">Category is required.</div>
   </div>
   <button type="submit">Submit</button>
+  <button (click)="closeForm()">Cancel</button>
 </form>
 
 

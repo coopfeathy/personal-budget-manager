@@ -1,1 +1,8 @@
-<p>transaction-detail works!</p>
+<div *ngIf="transaction" class="transaction-detail">
+    <button class="close-button" (click)="closeTransactionDetails()">X</button>
+    <h2>{{ transaction.title }}</h2>
+    <p>Amount: ${{ transaction.amount }}</p>
+    <p>Category: {{ transaction.category }}</p>
+    <p>Date: {{ transaction.date | date: 'short' }}</p>
+    <button (click)="deleteTransaction()">Delete</button>
+</div>

@@ -2,7 +2,7 @@
 <div *ngFor="let category of categories">
   <h3>{{ category }}</h3>
   <ul>
-    <li *ngFor="let transaction of getTransactionsByCategory(category)">
+    <li *ngFor="let transaction of getTransactionsByCategory(category)" (click)="selectTransaction(transaction)">
       {{ transaction.title }} - ${{ transaction.amount }} 
     </li>
   </ul>

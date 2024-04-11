@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, Output, EventEmitter } from '@angular/core';
 import { Transaction, TransactionService } from '../../services/transaction.service';
 
 @Component({
@@ -25,4 +25,11 @@ export class TransactionsListComponent implements OnInit {
   getTransactionsByCategory(category: string): Transaction[] {
     return this.transactions.filter(t => t.category === category);
   }
+
+  @Output() transactionSelected = new EventEmitter<Transaction>();
+
+  selectTransaction(transaction: Transaction) {
+    this.transactionSelected.emit(transaction);
+  }
+  
 }

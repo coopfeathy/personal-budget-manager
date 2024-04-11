@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, Output, EventEmitter } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { TransactionService, Transaction } from '../../services/transaction.service';
 import { SnackbarService } from '../../services/snackbar.service';
@@ -56,5 +56,11 @@ export class TransactionFormComponent {
       // Trigger validation feedback.
       this.snackbarService.show('Please fill out the form correctly.');
     }
+  }
+  
+  @Output() formClosed = new EventEmitter<void>();
+
+  closeForm() {
+    this.formClosed.emit();
   }
 }

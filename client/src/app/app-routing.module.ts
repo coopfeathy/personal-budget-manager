@@ -8,12 +8,6 @@ import { TransactionDetailComponent } from './components/transaction-detail/tran
 
 const routes: Routes = [
   { path: '', redirectTo: '/transactions', pathMatch: 'full' },
-  { path: 'transactions', component: TransactionsListComponent },
-  { path: 'add', component: TransactionFormComponent },
-  // Route for viewing a single transaction's detail
-  { path: 'transactions/:id', component: TransactionDetailComponent },
-  // Reusing TransactionFormComponent for editing, assuming you pass an ID
-  { path: 'edit/:id', component: TransactionFormComponent }
 ];
 
 @NgModule({

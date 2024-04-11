@@ -6,16 +6,16 @@
 <!-- * * * * * * * * * Delete the template below * * * * * * * * * -->
 <!-- * * * * * * * to get started with your project! * * * * * * * -->
 <!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * -->
+<header>
+  <h1>Transaction List</h1>
+  <button (click)="openForm()" class="add-transaction-button">Add Transaction</button>
+</header>
+<div class="content">
+  <app-transactions-list (transactionSelected)="selectTransaction($event)"></app-transactions-list>
+  <app-transaction-detail *ngIf="selectedTransaction" [transaction]="selectedTransaction"></app-transaction-detail>
+  <app-transaction-form *ngIf="showForm" (formClosed)="closeForm()"></app-transaction-form>
+</div>
 
-<nav>
-  <a routerLink="/transactions">Transactions List</a> 
-  &nbsp;&nbsp; | &nbsp;&nbsp;
-  <a routerLink="/add">Add Transaction</a>
-</nav>
-<br>
-<router-outlet></router-outlet>
-
-<!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * -->
 <!-- * * * * * * * * * * * The content above * * * * * * * * * * * * -->
 <!-- * * * * * * * * * * is only a placeholder * * * * * * * * * * * -->
 <!-- * * * * * * * * * * and can be replaced.  * * * * * * * * * * * -->
