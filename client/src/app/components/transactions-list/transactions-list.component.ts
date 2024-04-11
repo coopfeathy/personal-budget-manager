@@ -13,14 +13,12 @@ export class TransactionsListComponent implements OnInit {
   constructor(private transactionService: TransactionService) { }
 
   ngOnInit() {
-    this.transactionService.getTransactions().subscribe((response: any) => {
-      if (!Array.isArray(response.transactions)) {
-        console.error('transactions is not an array:', response.transactions);
-        return;
-      }
-  
-      this.transactions = response.transactions;
-      this.categories = [...new Set(this.transactions.map(t => t.category))];
+    this.transactionService.getTransactions().subscribe({
+      next: (transactions: Transaction[]) => {
+        this.transactions = transactions;
+        this.categories = [...new Set(transactions.map(t => t.category))];
+      },
+      error: (error) => console.error('Error fetching transactions:', error)
     });
   }
 

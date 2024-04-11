@@ -1,6 +1,9 @@
 <!-- Transactions List -->
-<ul>
-  <li *ngFor="let transaction of transactions">
-    {{ transaction.title }} - ${{ transaction.amount }}
-  </li>
-</ul>
+<div *ngFor="let category of categories">
+  <h3>{{ category }}</h3>
+  <ul>
+    <li *ngFor="let transaction of getTransactionsByCategory(category)">
+      {{ transaction.title }} - ${{ transaction.amount }} 
+    </li>
+  </ul>
+</div>
