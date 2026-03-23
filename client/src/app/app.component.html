@@ -1,27 +1,316 @@
-<!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * -->
-<!-- * * * * * * * * * * * The content below * * * * * * * * * * * -->
-<!-- * * * * * * * * * * is only a placeholder * * * * * * * * * * -->
-<!-- * * * * * * * * * * and can be replaced.  * * * * * * * * * * -->
-<!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * -->
-<!-- * * * * * * * * * Delete the template below * * * * * * * * * -->
-<!-- * * * * * * * to get started with your project! * * * * * * * -->
-<!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * -->
-<header>
-  <h1>Transaction List</h1>
-  <button (click)="openForm()" class="add-transaction-button">Add Transaction</button>
-</header>
-<div class="content">
-  <app-transactions-list (transactionSelected)="selectTransaction($event)"></app-transactions-list>
-  <app-transaction-detail *ngIf="selectedTransaction" [transaction]="selectedTransaction"></app-transaction-detail>
-  <app-transaction-form *ngIf="showForm" (formClosed)="closeForm()"></app-transaction-form>
-</div>
+<main class="app-shell">
+  <section class="hero">
+    <div>
+      <p class="eyebrow">Personal Finance Control Center</p>
+      <h1>{{ appName }}</h1>
+      <p>
+        Track cards, budgets, autopay, passive income, and crypto in one place. Built for personal use,
+        optimized for Netlify hosting, and ready for aggregation provider integration.
+      </p>
+    </div>
+    <div class="hero-chip-grid">
+      <article class="chip-card">
+        <p>Monthly Cashflow</p>
+        <h3>{{ netCashFlow | currency }}</h3>
+      </article>
+      <article class="chip-card">
+        <p>Budget Remaining</p>
+        <h3>{{ totalBudgetLimit - totalBudgetSpent | currency }}</h3>
+      </article>
+      <article class="chip-card">
+        <p>Auto Payment Load</p>
+        <h3>{{ autoPaymentTotal | currency }}</h3>
+      </article>
+      <article class="chip-card">
+        <p>Estimated Net Worth</p>
+        <h3>{{ netWorth | currency }}</h3>
+      </article>
+    </div>
+  </section>
 
-<!-- * * * * * * * * * * * The content above * * * * * * * * * * * * -->
-<!-- * * * * * * * * * * is only a placeholder * * * * * * * * * * * -->
-<!-- * * * * * * * * * * and can be replaced.  * * * * * * * * * * * -->
-<!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * -->
-<!-- * * * * * * * * * * End of Placeholder  * * * * * * * * * * * * -->
-<!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * -->
+  <section class="grid-4">
+    <article class="panel">
+      <h2>Accounts and Card Connections</h2>
+      <div class="stack">
+        <div class="row" *ngFor="let account of accounts">
+          <div>
+            <h4>{{ account.name }} • {{ account.last4 }}</h4>
+            <p>{{ account.institution }} • {{ account.type }}</p>
+          </div>
+          <strong [class.negative]="account.balance < 0">{{ account.balance | currency }}</strong>
+        </div>
+      </div>
+      <div class="provider-list">
+        <div class="provider" *ngFor="let provider of connectionProviders">
+          <div>
+            <h4>{{ provider.name }}</h4>
+            <p>{{ provider.note }}</p>
+          </div>
+          <button
+            type="button"
+            [disabled]="provider.status === 'coming-soon'"
+            (click)="connectProvider(provider.name)">
+            {{ provider.status === 'connected' ? 'Connected' : 'Connect' }}
+          </button>
+        </div>
+      </div>
+    </article>
 
+    <article class="panel">
+      <h2>Budget Categories</h2>
+      <div class="stack">
+        <div class="budget-row" *ngFor="let budget of budgets">
+          <div class="budget-head">
+            <h4>{{ budget.name }}</h4>
+            <p>{{ budget.spent | currency }} / {{ budget.monthlyLimit | currency }}</p>
+          </div>
+          <div class="meter">
+            <span [style.width.%]="getBudgetUsagePercent(budget)"></span>
+          </div>
+        </div>
+      </div>
+      <form class="inline-form" (ngSubmit)="addBudget()">
+        <input
+          type="text"
+          placeholder="New category"
+          [(ngModel)]="newBudget.name"
+          [ngModelOptions]="{standalone: true}" />
+        <input
+          type="number"
+          min="0"
+          placeholder="Monthly limit"
+          [(ngModel)]="newBudget.monthlyLimit"
+          [ngModelOptions]="{standalone: true}" />
+        <button type="submit">Add Budget</button>
+      </form>
+    </article>
 
-<router-outlet />
+    <article class="panel">
+      <h2>Auto Payments</h2>
+      <div class="stack">
+        <div class="row auto" *ngFor="let payment of upcomingAutoPayments">
+          <div>
+            <h4>{{ payment.name }}</h4>
+            <p>Due Day {{ payment.dueDay }} • {{ payment.category }}</p>
+          </div>
+          <div class="right-col">
+            <strong>{{ payment.amount | currency }}</strong>
+            <button type="button" (click)="markPaid(payment.id)">Mark Paid</button>
+          </div>
+        </div>
+      </div>
+      <form class="inline-form" (ngSubmit)="addAutoPayment()">
+        <input
+          type="text"
+          placeholder="Auto payment"
+          [(ngModel)]="newAutoPayment.name"
+          [ngModelOptions]="{standalone: true}" />
+        <input
+          type="number"
+          min="0"
+          placeholder="Amount"
+          [(ngModel)]="newAutoPayment.amount"
+          [ngModelOptions]="{standalone: true}" />
+        <input
+          type="number"
+          min="1"
+          max="31"
+          placeholder="Due day"
+          [(ngModel)]="newAutoPayment.dueDay"
+          [ngModelOptions]="{standalone: true}" />
+        <select
+          [(ngModel)]="newAutoPayment.category"
+          [ngModelOptions]="{standalone: true}">
+          <option *ngFor="let option of categoryOptions" [value]="option">{{ option }}</option>
+        </select>
+        <button type="submit">Add Autopay</button>
+      </form>
+    </article>
+
+    <article class="panel">
+      <h2>Savings Goals</h2>
+      <div class="stack">
+        <div class="goal" *ngFor="let goal of savingsGoals">
+          <div class="budget-head">
+            <h4>{{ goal.name }}</h4>
+            <p>{{ goal.currentAmount | currency }} / {{ goal.targetAmount | currency }}</p>
+          </div>
+          <div class="meter">
+            <span [style.width.%]="getGoalProgress(goal)"></span>
+          </div>
+          <small>Target Date: {{ goal.targetDate | date }}</small>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="grid-2">
+    <article class="panel">
+      <h2>Add Transaction</h2>
+      <form class="form-grid" (ngSubmit)="addTransaction()">
+        <input
+          type="text"
+          placeholder="Transaction title"
+          [(ngModel)]="newTransaction.title"
+          [ngModelOptions]="{standalone: true}" />
+        <input
+          type="number"
+          min="0"
+          placeholder="Amount"
+          [(ngModel)]="newTransaction.amount"
+          [ngModelOptions]="{standalone: true}" />
+        <select
+          [(ngModel)]="newTransaction.type"
+          [ngModelOptions]="{standalone: true}">
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
+        </select>
+        <select
+          [(ngModel)]="newTransaction.category"
+          [ngModelOptions]="{standalone: true}">
+          <option *ngFor="let option of categoryOptions" [value]="option">{{ option }}</option>
+        </select>
+        <select
+          [(ngModel)]="newTransaction.accountId"
+          [ngModelOptions]="{standalone: true}">
+          <option *ngFor="let account of accountOptions" [value]="account.id">
+            {{ account.name }} • {{ account.last4 }}
+          </option>
+        </select>
+        <input
+          type="date"
+          [(ngModel)]="newTransaction.date"
+          [ngModelOptions]="{standalone: true}" />
+        <textarea
+          rows="2"
+          placeholder="Optional notes"
+          [(ngModel)]="newTransaction.notes"
+          [ngModelOptions]="{standalone: true}"></textarea>
+        <button type="submit">Save Transaction</button>
+      </form>
+      <div class="stack mt">
+        <div class="row" *ngFor="let transaction of recentTransactions">
+          <div>
+            <h4>{{ transaction.title }}</h4>
+            <p>{{ transaction.category }} • {{ transaction.date | date: 'mediumDate' }}</p>
+          </div>
+          <strong [class.negative]="transaction.type === 'expense'">
+            {{ transaction.type === 'expense' ? '-' : '+' }}{{ transaction.amount | currency }}
+          </strong>
+        </div>
+      </div>
+    </article>
+
+    <article class="panel">
+      <h2>Passive Income Tracker</h2>
+      <p class="subhead">Estimated monthly passive income: {{ passiveIncomeMonthlyEstimate | currency }}</p>
+      <div class="stack">
+        <div class="row" *ngFor="let stream of passiveIncomeStreams">
+          <div>
+            <h4>{{ stream.source }}</h4>
+            <p>{{ stream.frequency }} • Next payout {{ stream.nextPayout | date: 'mediumDate' }}</p>
+          </div>
+          <strong>{{ stream.expectedAmount | currency }}</strong>
+        </div>
+      </div>
+      <form class="form-grid mt" (ngSubmit)="addIncomeStream()">
+        <input
+          type="text"
+          placeholder="Income source"
+          [(ngModel)]="newIncomeStream.source"
+          [ngModelOptions]="{standalone: true}" />
+        <select
+          [(ngModel)]="newIncomeStream.frequency"
+          [ngModelOptions]="{standalone: true}">
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly</option>
+        </select>
+        <input
+          type="number"
+          min="0"
+          placeholder="Expected amount"
+          [(ngModel)]="newIncomeStream.expectedAmount"
+          [ngModelOptions]="{standalone: true}" />
+        <input
+          type="date"
+          [(ngModel)]="newIncomeStream.nextPayout"
+          [ngModelOptions]="{standalone: true}" />
+        <button type="submit">Add Passive Income</button>
+      </form>
+    </article>
+  </section>
+
+  <section class="grid-2">
+    <article class="panel">
+      <h2>Crypto Tracker</h2>
+      <p class="subhead">Total crypto value: {{ cryptoPortfolioValue | currency }}</p>
+      <div class="stack">
+        <div class="row" *ngFor="let holding of cryptoHoldings">
+          <div>
+            <h4>{{ holding.symbol }} • {{ holding.assetName }}</h4>
+            <p>{{ holding.quantity }} on {{ holding.platform }}</p>
+          </div>
+          <div class="right-col">
+            <strong>{{ holding.quantity * holding.currentPrice | currency }}</strong>
+            <small [class.negative]="getCryptoProfit(holding) < 0">
+              P/L {{ getCryptoProfit(holding) | currency }}
+            </small>
+          </div>
+        </div>
+      </div>
+      <form class="form-grid mt" (ngSubmit)="addCryptoHolding()">
+        <input
+          type="text"
+          placeholder="Symbol (BTC)"
+          [(ngModel)]="newCryptoHolding.symbol"
+          [ngModelOptions]="{standalone: true}" />
+        <input
+          type="text"
+          placeholder="Asset name"
+          [(ngModel)]="newCryptoHolding.assetName"
+          [ngModelOptions]="{standalone: true}" />
+        <input
+          type="number"
+          min="0"
+          placeholder="Quantity"
+          [(ngModel)]="newCryptoHolding.quantity"
+          [ngModelOptions]="{standalone: true}" />
+        <input
+          type="number"
+          min="0"
+          placeholder="Average cost"
+          [(ngModel)]="newCryptoHolding.averageCost"
+          [ngModelOptions]="{standalone: true}" />
+        <input
+          type="number"
+          min="0"
+          placeholder="Current price"
+          [(ngModel)]="newCryptoHolding.currentPrice"
+          [ngModelOptions]="{standalone: true}" />
+        <input
+          type="text"
+          placeholder="Platform"
+          [(ngModel)]="newCryptoHolding.platform"
+          [ngModelOptions]="{standalone: true}" />
+        <button type="submit">Add Holding</button>
+      </form>
+    </article>
+
+    <article class="panel accent">
+      <h2>Smart Recommendations</h2>
+      <ul class="clean-list">
+        <li *ngFor="let insight of insights">{{ insight }}</li>
+      </ul>
+
+      <h3>Production Checklist</h3>
+      <ul class="clean-list">
+        <li>Deploy frontend to Netlify static hosting.</li>
+        <li>Store aggregator secrets in Netlify environment variables.</li>
+        <li>Run Plaid Link token exchange in serverless functions only.</li>
+        <li>Schedule nightly account sync with background function.</li>
+        <li>Enable MFA on every connected financial account.</li>
+      </ul>
+    </article>
+  </section>
+</main>
