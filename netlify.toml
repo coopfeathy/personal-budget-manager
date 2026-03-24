@@ -4,7 +4,7 @@
   publish = "dist/client/browser"
 
 [functions]
-  directory = "netlify/functions"
+  directory = "../netlify/functions"
 
 [[redirects]]
   from = "/api/*"
