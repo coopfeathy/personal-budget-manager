@@ -157,7 +157,7 @@ export class AppComponent implements OnInit, OnDestroy {
     category: 'Groceries',
     type: 'expense' as 'expense' | 'income',
     date: this.today,
-    accountId: 'acc-1',
+    accountId: '',
     notes: ''
   };
 
@@ -171,7 +171,7 @@ export class AppComponent implements OnInit, OnDestroy {
     amount: 0,
     dueDay: 1,
     category: 'Utilities',
-    accountId: 'acc-1'
+    accountId: ''
   };
 
   newIncomeStream = {
@@ -188,6 +188,21 @@ export class AppComponent implements OnInit, OnDestroy {
     averageCost: 0,
     currentPrice: 0,
     platform: ''
+  };
+
+  newAccount = {
+    name: '',
+    institution: '',
+    type: 'checking' as 'checking' | 'credit-card' | 'savings' | 'investment',
+    last4: '',
+    balance: 0
+  };
+
+  newSavingsGoal = {
+    name: '',
+    targetAmount: 0,
+    currentAmount: 0,
+    targetDate: this.today
   };
 
   get totalBudgetLimit(): number {
@@ -562,6 +577,96 @@ export class AppComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
 
+  addAccount(): void {
+    if (!this.newAccount.name.trim() || !this.newAccount.institution.trim()) {
+      return;
+    }
+
+    this.accounts = [
+      ...this.accounts,
+      {
+        id: this.createId('acc'),
+        name: this.newAccount.name.trim(),
+        institution: this.newAccount.institution.trim(),
+        type: this.newAccount.type,
+        last4: this.newAccount.last4.trim() || '0000',
+        balance: Number(this.newAccount.balance),
+        syncStatus: 'manual'
+      }
+    ];
+    this.newAccount = { name: '', institution: '', type: 'checking', last4: '', balance: 0 };
+    this.markDirty();
+  }
+
+  addSavingsGoal(): void {
+    if (!this.newSavingsGoal.name.trim() || this.newSavingsGoal.targetAmount <= 0) {
+      return;
+    }
+
+    this.savingsGoals = [
+      ...this.savingsGoals,
+      {
+        id: this.createId('goal'),
+        name: this.newSavingsGoal.name.trim(),
+        targetAmount: Number(this.newSavingsGoal.targetAmount),
+        currentAmount: Number(this.newSavingsGoal.currentAmount),
+        targetDate: this.newSavingsGoal.targetDate,
+        startDate: this.today
+      }
+    ];
+    this.newSavingsGoal = { name: '', targetAmount: 0, currentAmount: 0, targetDate: this.today };
+    this.markDirty();
+  }
+
+  removeTransaction(id: string): void {
+    this.transactions = this.transactions.filter(t => t.id !== id);
+    this.markDirty();
+  }
+
+  removeBudget(id: string): void {
+    this.budgets = this.budgets.filter(b => b.id !== id);
+    this.markDirty();
+  }
+
+  removeAutoPayment(id: string): void {
+    this.autoPayments = this.autoPayments.filter(p => p.id !== id);
+    this.markDirty();
+  }
+
+  removeIncomeStream(id: string): void {
+    this.passiveIncomeStreams = this.passiveIncomeStreams.filter(s => s.id !== id);
+    this.markDirty();
+  }
+
+  removeCryptoHolding(id: string): void {
+    this.cryptoHoldings = this.cryptoHoldings.filter(h => h.id !== id);
+    this.markDirty();
+  }
+
+  removeAccount(id: string): void {
+    this.accounts = this.accounts.filter(a => a.id !== id);
+    this.markDirty();
+  }
+
+  removeSavingsGoal(id: string): void {
+    this.savingsGoals = this.savingsGoals.filter(g => g.id !== id);
+    this.markDirty();
+  }
+
+  clearAllData(): void {
+    if (!confirm('Clear ALL data and reset to empty? This will immediately overwrite the saved state on the server.')) {
+      return;
+    }
+    this.accounts = [];
+    this.budgets = [];
+    this.transactions = [];
+    this.autoPayments = [];
+    this.passiveIncomeStreams = [];
+    this.cryptoHoldings = [];
+    this.savingsGoals = [];
+    void this.saveState();
+  }
+
   getBudgetUsagePercent(budget: BudgetCategory): number {
     if (!budget.monthlyLimit) {
       return 0;
@@ -617,11 +722,7 @@ export class AppComponent implements OnInit, OnDestroy {
   connectProvider(providerName: string): void {
     this.connectionProviders = this.connectionProviders.map(provider => {
       if (provider.name === providerName && provider.status !== 'coming-soon') {
-        return {
-          ...provider,
-          status: 'connected',
-          note: `${provider.note} Connection set to demo mode. Add Plaid server token exchange for production.`
-        };
+        return { ...provider, status: 'connected' };
       }
 
       return provider;

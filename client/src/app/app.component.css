@@ -446,3 +446,26 @@
     grid-template-columns: 1fr;
   }
 }
+
+.remove-btn {
+  border: none;
+  background: transparent;
+  color: #b23a48;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.remove-btn:hover {
+  background: #ffe0e3;
+}
+
+.status-actions button.danger {
+  background: #b23a48;
+}
+
+.status-actions button.danger:hover {
+  background: #8f1e2b;
+}

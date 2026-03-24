@@ -8,6 +8,7 @@
       </div>
       <div class="status-actions">
         <button type="button" (click)="saveState()" [disabled]="isSaving">{{ isSaving ? 'Saving...' : 'Save Now' }}</button>
+        <button type="button" class="secondary danger" (click)="clearAllData()">Clear All Data</button>
         <button type="button" class="secondary" (click)="signOut()">Sign Out</button>
       </div>
     </section>
@@ -78,7 +79,10 @@
               <h4>{{ account.name }} • {{ account.last4 }}</h4>
               <p>{{ account.institution }} • {{ account.type }}</p>
             </div>
-            <strong [class.negative]="account.balance < 0">{{ account.balance | currency }}</strong>
+            <div class="right-col">
+              <strong [class.negative]="account.balance < 0">{{ account.balance | currency }}</strong>
+              <button type="button" class="remove-btn" (click)="removeAccount(account.id)">×</button>
+            </div>
           </div>
         </div>
         <div class="provider-list">
@@ -95,6 +99,19 @@
             </button>
           </div>
         </div>
+        <form class="form-grid" (ngSubmit)="addAccount()">
+          <input type="text" placeholder="Account name" [(ngModel)]="newAccount.name" [ngModelOptions]="{standalone: true}" />
+          <input type="text" placeholder="Institution" [(ngModel)]="newAccount.institution" [ngModelOptions]="{standalone: true}" />
+          <select [(ngModel)]="newAccount.type" [ngModelOptions]="{standalone: true}">
+            <option value="checking">Checking</option>
+            <option value="savings">Savings</option>
+            <option value="credit-card">Credit Card</option>
+            <option value="investment">Investment</option>
+          </select>
+          <input type="text" placeholder="Last 4 digits" maxlength="4" [(ngModel)]="newAccount.last4" [ngModelOptions]="{standalone: true}" />
+          <input type="number" placeholder="Balance" [(ngModel)]="newAccount.balance" [ngModelOptions]="{standalone: true}" />
+          <button type="submit">Add Account</button>
+        </form>
       </article>
 
       <article class="panel">
@@ -103,7 +120,10 @@
           <div class="budget-row" *ngFor="let budget of budgets">
             <div class="budget-head">
               <h4>{{ budget.name }}</h4>
-              <p>{{ budget.spent | currency }} / {{ budget.monthlyLimit | currency }}</p>
+              <div style="display:flex;align-items:center;gap:8px">
+                <p>{{ budget.spent | currency }} / {{ budget.monthlyLimit | currency }}</p>
+                <button type="button" class="remove-btn" (click)="removeBudget(budget.id)">×</button>
+              </div>
             </div>
             <div class="meter">
               <span [style.width.%]="getBudgetUsagePercent(budget)"></span>
@@ -137,6 +157,7 @@
             <div class="right-col">
               <strong>{{ payment.amount | currency }}</strong>
               <button type="button" (click)="markPaid(payment.id)">Mark Paid</button>
+              <button type="button" class="remove-btn" (click)="removeAutoPayment(payment.id)">×</button>
             </div>
           </div>
         </div>
@@ -174,7 +195,10 @@
           <div class="goal" *ngFor="let goal of savingsGoals" [class.behind]="isGoalBehind(goal)">
             <div class="budget-head">
               <h4>{{ goal.name }}</h4>
-              <p>{{ goal.currentAmount | currency }} / {{ goal.targetAmount | currency }}</p>
+              <div style="display:flex;align-items:center;gap:8px">
+                <p>{{ goal.currentAmount | currency }} / {{ goal.targetAmount | currency }}</p>
+                <button type="button" class="remove-btn" (click)="removeSavingsGoal(goal.id)">×</button>
+              </div>
             </div>
             <div class="meter">
               <span [style.width.%]="getGoalProgress(goal)"></span>
@@ -183,6 +207,13 @@
             <small>Target Date: {{ goal.targetDate | date }} • {{ isGoalBehind(goal) ? 'Behind Schedule' : 'On Track' }}</small>
           </div>
         </div>
+        <form class="form-grid" (ngSubmit)="addSavingsGoal()">
+          <input type="text" placeholder="Goal name" [(ngModel)]="newSavingsGoal.name" [ngModelOptions]="{standalone: true}" />
+          <input type="number" min="0" placeholder="Target amount" [(ngModel)]="newSavingsGoal.targetAmount" [ngModelOptions]="{standalone: true}" />
+          <input type="number" min="0" placeholder="Current amount" [(ngModel)]="newSavingsGoal.currentAmount" [ngModelOptions]="{standalone: true}" />
+          <input type="date" [(ngModel)]="newSavingsGoal.targetDate" [ngModelOptions]="{standalone: true}" />
+          <button type="submit" style="grid-column:span 2">Add Goal</button>
+        </form>
       </article>
     </section>
 
@@ -236,9 +267,12 @@
               <h4>{{ transaction.title }}</h4>
               <p>{{ transaction.category }} • {{ transaction.date | date: 'mediumDate' }}</p>
             </div>
-            <strong [class.negative]="transaction.type === 'expense'">
-              {{ transaction.type === 'expense' ? '-' : '+' }}{{ transaction.amount | currency }}
-            </strong>
+            <div class="right-col">
+              <strong [class.negative]="transaction.type === 'expense'">
+                {{ transaction.type === 'expense' ? '-' : '+' }}{{ transaction.amount | currency }}
+              </strong>
+              <button type="button" class="remove-btn" (click)="removeTransaction(transaction.id)">×</button>
+            </div>
           </div>
         </div>
       </article>
@@ -252,7 +286,10 @@
             <h4>{{ stream.source }}</h4>
             <p>{{ stream.frequency }} • Next payout {{ stream.nextPayout | date: 'mediumDate' }}</p>
           </div>
-          <strong>{{ stream.expectedAmount | currency }}</strong>
+          <div class="right-col">
+            <strong>{{ stream.expectedAmount | currency }}</strong>
+            <button type="button" class="remove-btn" (click)="removeIncomeStream(stream.id)">×</button>
+          </div>
         </div>
       </div>
       <form class="form-grid mt" (ngSubmit)="addIncomeStream()">
@@ -298,6 +335,7 @@
             <small [class.negative]="getCryptoProfit(holding) < 0">
               P/L {{ getCryptoProfit(holding) | currency }}
             </small>
+            <button type="button" class="remove-btn" (click)="removeCryptoHolding(holding.id)">×</button>
           </div>
         </div>
       </div>
@@ -348,8 +386,7 @@
       <h3>Production Checklist</h3>
       <ul class="clean-list">
         <li>Deploy frontend to Netlify static hosting.</li>
-        <li>Store aggregator secrets in Netlify environment variables.</li>
-        <li>Run Plaid Link token exchange in serverless functions only.</li>
+        <li>Store secrets in Netlify environment variables.</li>
         <li>Schedule nightly account sync with background function.</li>
         <li>Enable MFA on every connected financial account.</li>
       </ul>
