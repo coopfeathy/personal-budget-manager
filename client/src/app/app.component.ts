@@ -732,6 +732,35 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private async restoreSession(): Promise<void> {
+
+    accountTypeIcon(type: string): string {
+      const map: Record<string, string> = {
+        'checking': '🏧',
+        'savings': '🏛️',
+        'credit-card': '💳',
+        'investment': '📈',
+      };
+      return map[type] || '🏦';
+    }
+
+    categoryIcon(name: string): string {
+      const n = (name || '').toLowerCase();
+      if (n.includes('hous') || n.includes('rent') || n.includes('mortg')) return '🏠';
+      if (n.includes('food') || n.includes('grocer') || n.includes('dine')) return '🍔';
+      if (n.includes('transport') || n.includes('gas') || n.includes('car')) return '🚗';
+      if (n.includes('util') || n.includes('electric') || n.includes('internet')) return '💡';
+      if (n.includes('health') || n.includes('medical') || n.includes('pharma')) return '🏥';
+      if (n.includes('entertain') || n.includes('subscript') || n.includes('stream')) return '🎬';
+      if (n.includes('invest') || n.includes('stock') || n.includes('etf')) return '📈';
+      if (n.includes('debt') || n.includes('loan') || n.includes('credit')) return '💳';
+      if (n.includes('insur')) return '🛡️';
+      if (n.includes('salar') || n.includes('income') || n.includes('wage')) return '💵';
+      if (n.includes('travel') || n.includes('vacation') || n.includes('hotel')) return '✈️';
+      if (n.includes('cloth') || n.includes('shopping')) return '🛍️';
+      if (n.includes('education') || n.includes('school') || n.includes('course')) return '📚';
+      return '📂';
+    }
+
     const token = localStorage.getItem(this.tokenStorageKey);
     if (!token) {
       this.isAuthenticated = false;

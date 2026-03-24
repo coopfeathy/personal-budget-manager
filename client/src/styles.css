@@ -1,33 +1,20 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
 
-:root {
-	--bg-a: #edf7f5;
-	--bg-b: #fdf4e7;
-	--ink: #12343f;
-}
-
-* {
-	box-sizing: border-box;
-}
-
-html,
-body {
-	min-height: 100%;
-}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
 
 body {
-	margin: 0;
-	color: var(--ink);
-	font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-	background:
-		radial-gradient(circle at 10% 10%, rgba(52, 232, 158, 0.12), transparent 30%),
-		radial-gradient(circle at 85% 0%, rgba(255, 159, 28, 0.18), transparent 34%),
-		linear-gradient(145deg, var(--bg-a) 0%, var(--bg-b) 100%);
+  margin: 0;
+  color: #e8f0f2;
+  font-family: 'Inter', 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  background: #060b18;
+  overflow-x: hidden;
 }
 
-h1,
-h2,
-h3,
-h4 {
-	font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+h1, h2, h3, h4 {
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
 }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.03); }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
