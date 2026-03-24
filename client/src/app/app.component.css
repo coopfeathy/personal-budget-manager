@@ -6,6 +6,167 @@
   gap: 18px;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(520px, 100%);
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 24px;
+  border: 1px solid #dce7e5;
+  box-shadow: 0 10px 26px rgba(15, 52, 67, 0.12);
+}
+
+.auth-card h1 {
+  margin: 8px 0;
+}
+
+.auth-form {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.auth-form input {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #c7dbd7;
+}
+
+.auth-form button {
+  border: none;
+  border-radius: 10px;
+  background: #0f3443;
+  color: #ffffff;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.auth-error {
+  color: #b23a48;
+  margin: 10px 0 0;
+}
+
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-bar p,
+.status-bar small {
+  margin: 3px 0 0;
+  color: #4f6b71;
+}
+
+.status-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.status-actions button {
+  border: none;
+  border-radius: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  color: #ffffff;
+  background: #0f3443;
+}
+
+.status-actions button.secondary {
+  background: #40636d;
+}
+
+.runway-track {
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #d9eae7;
+}
+
+.runway-track span {
+  display: block;
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+.runway-meta {
+  margin: 10px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-success {
+  color: #1f8f5f;
+  background: #1f8f5f;
+}
+
+.status-warning {
+  color: #bd7a1d;
+  background: #bd7a1d;
+}
+
+.status-danger {
+  color: #b23a48;
+  background: #b23a48;
+}
+
+.runway-meta .status-success,
+.runway-meta .status-warning,
+.runway-meta .status-danger {
+  background: transparent;
+}
+
+.stacked-chart {
+  height: 220px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.chart-column {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.chart-stack {
+  height: 180px;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #d6e7e4;
+  background: #f3f9f8;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.seg {
+  width: 100%;
+  display: block;
+}
+
+.seg.cash {
+  background: #2ec4b6;
+}
+
+.seg.crypto {
+  background: #0ea5e9;
+}
+
+.seg.passive {
+  background: #ff9f1c;
+}
+
 .hero {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
@@ -184,6 +345,11 @@
   border: 1px solid #e3f0ee;
   border-radius: 10px;
   background: #fbfefd;
+}
+
+.goal.behind {
+  border-color: #f2b8bf;
+  background: #fff5f6;
 }
 
 .budget-head {

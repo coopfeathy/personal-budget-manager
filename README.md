@@ -49,6 +49,9 @@ netlify dev
 4. Add environment variables in Netlify Site Settings:
    - `NETLIFY_DATABASE_URL`
    - `NETLIFY_DATABASE_URL_UNPOOLED`
+   - `APP_OWNER_EMAIL`
+   - `APP_ACCESS_CODE`
+   - `APP_AUTH_SECRET`
    - `PLAID_CLIENT_ID`
    - `PLAID_SECRET`
    - `PLAID_ENV`
@@ -70,3 +73,12 @@ For direct card/bank sync, use an aggregator provider such as Plaid. Keep creden
 - Prefer `NETLIFY_DATABASE_URL_UNPOOLED` for Netlify Functions to reduce pooling-related connection issues in serverless environments.
 - Keep all Plaid token exchange and sync logic in serverless functions only.
 - The starter sync endpoint is available at `/api/handle-sync` and validates database connectivity.
+
+## Owner-Only Production Access
+
+- The app now supports owner-only login using serverless auth endpoints:
+   - `POST /api/auth-login`
+   - `GET /api/auth-me`
+   - `GET/PUT /api/finance-state`
+- Only the email set in `APP_OWNER_EMAIL` is authorized.
+- Use a strong random value for `APP_AUTH_SECRET` and keep it server-side only.
