@@ -129,171 +129,21 @@ export class AppComponent implements OnInit, OnDestroy {
     accessCode: ''
   };
 
-  accounts: Account[] = [
-    {
-      id: 'acc-1',
-      name: 'Primary Checking',
-      institution: 'Chase',
-      type: 'checking',
-      last4: '1442',
-      balance: 7284,
-      syncStatus: 'manual'
-    },
-    {
-      id: 'acc-2',
-      name: 'Rewards Visa',
-      institution: 'Capital One',
-      type: 'credit-card',
-      last4: '8891',
-      balance: -1265,
-      syncStatus: 'needs-attention'
-    },
-    {
-      id: 'acc-3',
-      name: 'HYSA Reserve',
-      institution: 'Ally',
-      type: 'savings',
-      last4: '2207',
-      balance: 15300,
-      syncStatus: 'manual'
-    }
-  ];
+  accounts: Account[] = [];
 
-  budgets: BudgetCategory[] = [
-    { id: 'bud-1', name: 'Housing', monthlyLimit: 1900, spent: 1800 },
-    { id: 'bud-2', name: 'Groceries', monthlyLimit: 650, spent: 420 },
-    { id: 'bud-3', name: 'Transportation', monthlyLimit: 400, spent: 230 },
-    { id: 'bud-4', name: 'Entertainment', monthlyLimit: 350, spent: 175 }
-  ];
+  budgets: BudgetCategory[] = [];
 
-  transactions: Transaction[] = [
-    {
-      id: 'txn-1',
-      title: 'Apartment Rent',
-      amount: 1800,
-      category: 'Housing',
-      type: 'expense',
-      date: this.today,
-      accountId: 'acc-1',
-      tags: ['fixed-cost', 'monthly']
-    },
-    {
-      id: 'txn-2',
-      title: 'Payroll Deposit',
-      amount: 4800,
-      category: 'Salary',
-      type: 'income',
-      date: this.today,
-      accountId: 'acc-1',
-      tags: ['income']
-    },
-    {
-      id: 'txn-3',
-      title: 'Grocery Run',
-      amount: 142,
-      category: 'Groceries',
-      type: 'expense',
-      date: this.today,
-      accountId: 'acc-2',
-      tags: ['food']
-    }
-  ];
+  transactions: Transaction[] = [];
 
-  autoPayments: AutoPayment[] = [
-    {
-      id: 'auto-1',
-      name: 'Internet Service',
-      amount: 95,
-      dueDay: 8,
-      category: 'Utilities',
-      accountId: 'acc-1',
-      isActive: true,
-      lastPaid: this.today
-    },
-    {
-      id: 'auto-2',
-      name: 'Student Loan',
-      amount: 265,
-      dueDay: 19,
-      category: 'Debt',
-      accountId: 'acc-1',
-      isActive: true,
-      lastPaid: this.today
-    }
-  ];
+  autoPayments: AutoPayment[] = [];
 
-  passiveIncomeStreams: PassiveIncomeStream[] = [
-    {
-      id: 'inc-1',
-      source: 'Dividend ETF',
-      frequency: 'quarterly',
-      expectedAmount: 180,
-      receivedYtd: 360,
-      nextPayout: this.today
-    },
-    {
-      id: 'inc-2',
-      source: 'Rental Suite',
-      frequency: 'monthly',
-      expectedAmount: 1250,
-      receivedYtd: 3750,
-      nextPayout: this.today
-    }
-  ];
+  passiveIncomeStreams: PassiveIncomeStream[] = [];
 
-  cryptoHoldings: CryptoHolding[] = [
-    {
-      id: 'crypto-1',
-      symbol: 'BTC',
-      assetName: 'Bitcoin',
-      quantity: 0.35,
-      averageCost: 41200,
-      currentPrice: 66300,
-      platform: 'Coinbase',
-      stakingYield: 0
-    },
-    {
-      id: 'crypto-2',
-      symbol: 'ETH',
-      assetName: 'Ethereum',
-      quantity: 3.8,
-      averageCost: 2250,
-      currentPrice: 3400,
-      platform: 'Kraken',
-      stakingYield: 3.4
-    }
-  ];
+  cryptoHoldings: CryptoHolding[] = [];
 
-  savingsGoals: SavingsGoal[] = [
-    {
-      id: 'goal-1',
-      name: 'Emergency Fund',
-      targetAmount: 22000,
-      currentAmount: 15300,
-      targetDate: '2026-12-31',
-      startDate: '2025-01-01'
-    },
-    {
-      id: 'goal-2',
-      name: 'Travel Fund',
-      targetAmount: 5500,
-      currentAmount: 1700,
-      targetDate: '2026-08-01',
-      startDate: '2025-09-01'
-    }
-  ];
+  savingsGoals: SavingsGoal[] = [];
 
   connectionProviders: ConnectionProvider[] = [
-    {
-      name: 'Plaid Aggregation',
-      status: 'available',
-      note: 'Best for connecting most US banks and card issuers.'
-    },
-    {
-      name: 'MX Aggregation',
-      status: 'coming-soon',
-      note: 'Alternative aggregator for improved institution coverage.'
-    },
     {
       name: 'CSV Import',
       status: 'connected',
@@ -846,13 +696,13 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private applyStateModel(model: FinanceStateModel): void {
-    this.accounts = model.accounts || this.accounts;
-    this.budgets = model.budgets || this.budgets;
-    this.transactions = model.transactions || this.transactions;
-    this.autoPayments = model.autoPayments || this.autoPayments;
-    this.passiveIncomeStreams = model.passiveIncomeStreams || this.passiveIncomeStreams;
-    this.cryptoHoldings = model.cryptoHoldings || this.cryptoHoldings;
-    this.savingsGoals = (model.savingsGoals || this.savingsGoals).map(goal => ({
+    this.accounts = model.accounts || [];
+    this.budgets = model.budgets || [];
+    this.transactions = model.transactions || [];
+    this.autoPayments = model.autoPayments || [];
+    this.passiveIncomeStreams = model.passiveIncomeStreams || [];
+    this.cryptoHoldings = model.cryptoHoldings || [];
+    this.savingsGoals = (model.savingsGoals || []).map(goal => ({
       ...goal,
       startDate: goal.startDate || this.today
     }));
