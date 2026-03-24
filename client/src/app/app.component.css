@@ -129,6 +129,10 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
   gap: 20px;
   align-items: center;
 }
+.top-combined {
+  border: 1px solid rgba(0, 212, 168, 0.28);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(0, 212, 168, 0.05));
+}
 .hero-title {
   font-size: clamp(1.9rem, 3.5vw, 3.2rem);
   margin: 8px 0 10px;
@@ -143,6 +147,19 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
   margin: 0 0 16px;
   max-width: 52ch;
   font-size: 0.97rem;
+}
+.networth-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(167, 139, 250, 0.1);
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+.networth-pill strong {
+  color: #f5f3ff;
+  font-size: 0.95rem;
 }
 .hero-stats {
   display: grid;
@@ -406,6 +423,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
   margin-top: 14px;
   align-items: start;
 }
+.inline-form-2 {
+  grid-template-columns: 1fr auto;
+}
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field label { font-size: 0.8rem; color: #94a3b8; font-weight: 500; }
 
@@ -465,6 +485,44 @@ textarea { resize: vertical; }
 .checklist .row { background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; padding: 8px 0; }
 .checklist .row:last-child { border-bottom: none; }
 
+/* ── Passive + Roth metrics ── */
+.passive-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.metric-chip {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.metric-chip p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+.metric-chip strong {
+  display: block;
+  margin-top: 4px;
+  color: #f1f5f9;
+  font-size: 0.92rem;
+}
+.roth-metrics .metric-chip {
+  border-color: rgba(45, 212, 191, 0.18);
+  background: rgba(45, 212, 191, 0.06);
+}
+
+.crypto-sync-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 12px;
+  flex-wrap: wrap;
+}
+
 /* ── Empty states ── */
 .empty-state {
   text-align: center;
@@ -519,14 +577,41 @@ textarea { resize: vertical; }
   .form-grid textarea, .form-grid .full-col { grid-column: span 1; }
   .inline-form { grid-template-columns: 1fr auto; }
   .stacked-chart { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .passive-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {
   .app-shell { padding: 14px 10px 48px; }
-  .hero-stats { grid-template-columns: 1fr 1fr; }
+  .panel { padding: 14px; }
+  .hero-stats { grid-template-columns: 1fr; }
+  .hero-title { font-size: 1.55rem; }
+  .panel-head h2 { font-size: 1rem; }
+  .stat-card h3 { font-size: 1rem; }
+  .row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .row-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .budget-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .meter-label {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .passive-metrics { grid-template-columns: 1fr; }
   .account-grid { grid-template-columns: 1fr; }
   .goals-grid { grid-template-columns: 1fr; }
   .inline-form { grid-template-columns: 1fr; }
+  .inline-form-2 { grid-template-columns: 1fr; }
+  .add-form-toggle > :not(summary) { padding: 0 8px 10px; }
   .auth-card { padding: 20px 16px; }
-  .stacked-chart { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stacked-chart {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: auto;
+  }
 }

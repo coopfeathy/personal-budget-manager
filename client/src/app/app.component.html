@@ -24,15 +24,19 @@
       </div>
     </section>
 
-    <!-- Hero -->
-    <section class="glass panel hero anim-in" style="--delay:0.05s">
+    <!-- Hero / Combined Net Worth Header -->
+    <section class="glass panel hero top-combined anim-in" style="--delay:0.05s">
       <div>
-        <p class="hint-text" style="margin:0 0 4px">Personal Finance Control Center</p>
+        <p class="hint-text" style="margin:0 0 4px">Net Worth Command Center</p>
         <h1 class="hero-title">{{ appName }}</h1>
         <p class="hero-desc">
           Owner-only dashboard backed by Neon PostgreSQL and Netlify Functions.
           Track net worth, runway, budgets, goals, and crypto — all in one secure place.
         </p>
+        <div class="networth-pill">
+          <span class="badge badge-purple">Total Net Worth</span>
+          <strong>{{ netWorth | currency }}</strong>
+        </div>
       </div>
       <div class="hero-stats">
         <div class="stat-card">
@@ -375,15 +379,87 @@
       </article>
     </section>
 
+    <!-- Roth IRA -->
+    <section class="grid-2">
+      <article class="glass panel anim-in" style="--delay:0.245s">
+        <div class="panel-head">
+          <h2>&#127963; Roth IRA Tracker</h2>
+          <span class="badge badge-teal">{{ rothIra.currentBalance | currency }}</span>
+        </div>
+        <p class="hint-text">Track annual contributions, remaining room, and year-end projection in one place</p>
+
+        <div class="passive-metrics roth-metrics">
+          <div class="metric-chip">
+            <p>Contributions YTD</p>
+            <strong>{{ rothIra.contributionsYtd | currency }}</strong>
+          </div>
+          <div class="metric-chip">
+            <p>Remaining This Year</p>
+            <strong>{{ rothIraRemainingContribution | currency }}</strong>
+          </div>
+          <div class="metric-chip">
+            <p>Projected Year-End</p>
+            <strong>{{ rothIraProjectedYearEndBalance | currency }}</strong>
+          </div>
+          <div class="metric-chip">
+            <p>Expected Return</p>
+            <strong>{{ rothIra.expectedAnnualReturn | number:'1.1-2' }}%</strong>
+          </div>
+        </div>
+
+        <form class="form-grid" (ngSubmit)="updateRothIraSettings()">
+          <div class="field"><label>Current Balance</label>
+            <input type="number" min="0" step="any" [(ngModel)]="rothIra.currentBalance" [ngModelOptions]="{standalone: true}" /></div>
+          <div class="field"><label>Planned Contribution (Year)</label>
+            <input type="number" min="0" step="any" [(ngModel)]="rothIra.yearlyContribution" [ngModelOptions]="{standalone: true}" /></div>
+          <div class="field"><label>Yearly Contribution Limit</label>
+            <input type="number" min="0" step="any" [(ngModel)]="rothIra.yearlyLimit" [ngModelOptions]="{standalone: true}" /></div>
+          <div class="field"><label>Match %</label>
+            <input type="number" min="0" step="0.1" [(ngModel)]="rothIra.employerMatchPercent" [ngModelOptions]="{standalone: true}" /></div>
+          <div class="field"><label>Expected Annual Return %</label>
+            <input type="number" min="0" step="0.1" [(ngModel)]="rothIra.expectedAnnualReturn" [ngModelOptions]="{standalone: true}" /></div>
+          <div class="field"><label>Contributions YTD</label>
+            <input type="number" min="0" step="any" [(ngModel)]="rothIra.contributionsYtd" [ngModelOptions]="{standalone: true}" /></div>
+          <div class="full-col" style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="submit" class="btn-primary">Save Roth IRA Settings</button>
+          </div>
+        </form>
+
+        <form class="inline-form inline-form-2" (ngSubmit)="addRothContribution()">
+          <input type="number" min="0" step="any" placeholder="Contribution amount" [(ngModel)]="newRothContribution" [ngModelOptions]="{standalone: true}" />
+          <button type="submit" class="btn-primary">Add Contribution</button>
+        </form>
+      </article>
+    </section>
+
     <!-- Passive Income + Crypto -->
     <section class="grid-2">
 
       <article class="glass panel anim-in" style="--delay:0.26s">
         <div class="panel-head">
           <h2>&#128176; Passive Income</h2>
-          <span class="badge badge-teal">{{ passiveIncomeMonthlyEstimate | currency }}/mo</span>
+          <span class="badge badge-teal">{{ passiveIncomePerSecondEstimate | currency:'USD':'symbol':'1.6-6' }}/sec</span>
         </div>
-        <p class="hint-text">Dividends, rentals, and side-hustle income with payout schedules</p>
+        <p class="hint-text">Track streams by second to yearly cadence, including BTC-denominated passive income</p>
+
+        <div class="passive-metrics">
+          <div class="metric-chip">
+            <p>Per Second</p>
+            <strong>{{ passiveIncomePerSecondEstimate | currency:'USD':'symbol':'1.6-6' }}</strong>
+          </div>
+          <div class="metric-chip">
+            <p>Monthly</p>
+            <strong>{{ passiveIncomeMonthlyEstimate | currency }}</strong>
+          </div>
+          <div class="metric-chip">
+            <p>Yearly</p>
+            <strong>{{ passiveIncomeYearlyEstimate | currency }}</strong>
+          </div>
+          <div class="metric-chip">
+            <p>BTC Streams (Yearly)</p>
+            <strong>{{ passiveIncomeBtcYearly | number:'1.4-8' }} BTC</strong>
+          </div>
+        </div>
 
         <div class="stack" *ngIf="passiveIncomeStreams.length > 0; else noIncome">
           <div class="row" *ngFor="let stream of passiveIncomeStreams">
@@ -391,11 +467,14 @@
               <span class="income-icon">&#128181;</span>
               <div>
                 <h4>{{ stream.source }}</h4>
-                <p>{{ stream.frequency }} &bull; Next: {{ stream.nextPayout | date:'mediumDate' }}</p>
+                <p>{{ stream.frequency }} &bull; {{ stream.assetType.toUpperCase() }} &bull; Next: {{ stream.nextPayout | date:'mediumDate' }}</p>
               </div>
             </div>
             <div class="row-actions">
-              <strong class="positive">+{{ stream.expectedAmount | currency }}</strong>
+              <div style="text-align:right">
+                <strong class="positive">+{{ getPassiveStreamUsdPerYear(stream) | currency }}/yr</strong>
+                <p class="muted">{{ getPassiveStreamUsdPerSecond(stream) | currency:'USD':'symbol':'1.6-6' }}/sec</p>
+              </div>
               <button type="button" class="remove-btn" (click)="removeIncomeStream(stream.id)" title="Remove">&#215;</button>
             </div>
           </div>
@@ -411,12 +490,20 @@
               <input type="text" placeholder="e.g. Dividend ETF" [(ngModel)]="newIncomeStream.source" [ngModelOptions]="{standalone: true}" /></div>
             <div class="field"><label>Frequency</label>
               <select [(ngModel)]="newIncomeStream.frequency" [ngModelOptions]="{standalone: true}">
+                <option value="secondly">Secondly</option>
+                <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
                 <option value="quarterly">Quarterly</option>
+                <option value="yearly">Yearly</option>
               </select></div>
-            <div class="field"><label>Expected Amount</label>
-              <input type="number" min="0" placeholder="0.00" [(ngModel)]="newIncomeStream.expectedAmount" [ngModelOptions]="{standalone: true}" /></div>
+            <div class="field"><label>Asset Type</label>
+              <select [(ngModel)]="newIncomeStream.assetType" [ngModelOptions]="{standalone: true}">
+                <option value="usd">USD</option>
+                <option value="btc">BTC</option>
+              </select></div>
+            <div class="field"><label>Amount Per Cadence</label>
+              <input type="number" min="0" step="any" placeholder="0.00" [(ngModel)]="newIncomeStream.expectedAmount" [ngModelOptions]="{standalone: true}" /></div>
             <div class="field"><label>Next Payout</label>
               <input type="date" [(ngModel)]="newIncomeStream.nextPayout" [ngModelOptions]="{standalone: true}" /></div>
             <div class="full-col"><button type="submit" class="btn-primary">Add</button></div>
@@ -429,7 +516,13 @@
           <h2>&#8383; Crypto Portfolio</h2>
           <span class="badge badge-purple">{{ cryptoPortfolioValue | currency }}</span>
         </div>
-        <p class="hint-text">Track coin holdings with unrealized P&amp;L per position</p>
+        <p class="hint-text">Track coin holdings with live market prices (CoinGecko) and unrealized P&amp;L</p>
+        <div class="crypto-sync-row">
+          <span class="muted">{{ cryptoPriceStatus }}</span>
+          <button type="button" class="btn-ghost btn-sm" (click)="refreshCryptoPrices()" [disabled]="isCryptoSyncing">
+            {{ isCryptoSyncing ? 'Syncing...' : 'Refresh Live Prices' }}
+          </button>
+        </div>
 
         <div class="stack" *ngIf="cryptoHoldings.length > 0; else noCrypto">
           <div class="row" *ngFor="let holding of cryptoHoldings">
@@ -443,6 +536,7 @@
             <div class="row-actions">
               <div style="text-align:right">
                 <strong>{{ holding.quantity * holding.currentPrice | currency }}</strong>
+                <p class="muted">Live: {{ holding.currentPrice | currency }} / coin</p>
                 <p class="muted" [class.positive]="getCryptoProfit(holding) >= 0" [class.negative]="getCryptoProfit(holding) < 0">
                   P/L: {{ getCryptoProfit(holding) | currency }}
                 </p>
@@ -466,7 +560,7 @@
               <input type="number" min="0" step="any" placeholder="0.00" [(ngModel)]="newCryptoHolding.quantity" [ngModelOptions]="{standalone: true}" /></div>
             <div class="field"><label>Avg Cost</label>
               <input type="number" min="0" placeholder="0.00" [(ngModel)]="newCryptoHolding.averageCost" [ngModelOptions]="{standalone: true}" /></div>
-            <div class="field"><label>Current Price</label>
+            <div class="field"><label>Current Price (optional override)</label>
               <input type="number" min="0" placeholder="0.00" [(ngModel)]="newCryptoHolding.currentPrice" [ngModelOptions]="{standalone: true}" /></div>
             <div class="field"><label>Platform</label>
               <input type="text" placeholder="Coinbase" [(ngModel)]="newCryptoHolding.platform" [ngModelOptions]="{standalone: true}" /></div>

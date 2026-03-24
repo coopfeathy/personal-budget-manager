@@ -37,10 +37,20 @@ interface AutoPayment {
 interface PassiveIncomeStream {
   id: string;
   source: string;
-  frequency: 'weekly' | 'monthly' | 'quarterly';
+  frequency: 'secondly' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  assetType: 'usd' | 'btc';
   expectedAmount: number;
   receivedYtd: number;
   nextPayout: string;
+}
+
+interface RothIraProfile {
+  currentBalance: number;
+  yearlyContribution: number;
+  yearlyLimit: number;
+  employerMatchPercent: number;
+  expectedAnnualReturn: number;
+  contributionsYtd: number;
 }
 
 interface CryptoHolding {
@@ -87,6 +97,7 @@ interface FinanceStateModel {
   passiveIncomeStreams: PassiveIncomeStream[];
   cryptoHoldings: CryptoHolding[];
   savingsGoals: SavingsGoal[];
+  rothIra: RothIraProfile;
 }
 
 interface NetWorthPoint {
@@ -106,6 +117,27 @@ interface NetWorthPoint {
 export class AppComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
   private saveIntervalId: ReturnType<typeof setInterval> | null = null;
+  private cryptoSyncIntervalId: ReturnType<typeof setInterval> | null = null;
+
+  private readonly symbolToCoinId: Record<string, string> = {
+    BTC: 'bitcoin',
+    ETH: 'ethereum',
+    SOL: 'solana',
+    ADA: 'cardano',
+    XRP: 'ripple',
+    DOGE: 'dogecoin',
+    AVAX: 'avalanche-2',
+    MATIC: 'matic-network',
+    DOT: 'polkadot',
+    LINK: 'chainlink',
+    LTC: 'litecoin',
+    BCH: 'bitcoin-cash',
+    XLM: 'stellar',
+    UNI: 'uniswap',
+    ATOM: 'cosmos',
+    OP: 'optimism',
+    ARB: 'arbitrum'
+  };
 
   readonly tokenStorageKey = 'pbm_owner_token';
   readonly appName = 'Personal Budget Manager';
@@ -123,6 +155,9 @@ export class AppComponent implements OnInit, OnDestroy {
   lastSyncedAt: string | null = null;
   isSaving = false;
   isDirty = false;
+  isCryptoSyncing = false;
+  cryptoPriceStatus = 'Waiting for holdings to sync live prices.';
+  lastCryptoSyncedAt: string | null = null;
 
   loginForm = {
     email: '',
@@ -142,6 +177,17 @@ export class AppComponent implements OnInit, OnDestroy {
   cryptoHoldings: CryptoHolding[] = [];
 
   savingsGoals: SavingsGoal[] = [];
+
+  rothIra: RothIraProfile = {
+    currentBalance: 0,
+    yearlyContribution: 0,
+    yearlyLimit: 7000,
+    employerMatchPercent: 0,
+    expectedAnnualReturn: 7,
+    contributionsYtd: 0
+  };
+
+  newRothContribution = 0;
 
   connectionProviders: ConnectionProvider[] = [
     {
@@ -176,7 +222,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
   newIncomeStream = {
     source: '',
-    frequency: 'monthly' as 'weekly' | 'monthly' | 'quarterly',
+    frequency: 'monthly' as 'secondly' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly',
+    assetType: 'usd' as 'usd' | 'btc',
     expectedAmount: 0,
     nextPayout: this.today
   };
@@ -236,16 +283,41 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   get passiveIncomeMonthlyEstimate(): number {
-    return this.passiveIncomeStreams.reduce((sum, stream) => {
-      if (stream.frequency === 'weekly') {
-        return sum + (stream.expectedAmount * 52) / 12;
-      }
-      if (stream.frequency === 'quarterly') {
-        return sum + stream.expectedAmount / 3;
-      }
+    return this.passiveIncomeYearlyEstimate / 12;
+  }
 
-      return sum + stream.expectedAmount;
+  get passiveIncomeYearlyEstimate(): number {
+    return this.passiveIncomeStreams.reduce((sum, stream) => sum + this.getPassiveStreamUsdPerYear(stream), 0);
+  }
+
+  get passiveIncomePerSecondEstimate(): number {
+    return this.passiveIncomeYearlyEstimate / (365 * 24 * 60 * 60);
+  }
+
+  get passiveIncomeBtcYearly(): number {
+    return this.passiveIncomeStreams.reduce((sum, stream) => {
+      if (stream.assetType !== 'btc') {
+        return sum;
+      }
+      return sum + this.getCadenceFactorPerYear(stream.frequency) * stream.expectedAmount;
     }, 0);
+  }
+
+  get btcUsdPrice(): number {
+    const btcHolding = this.cryptoHoldings.find(holding => holding.symbol.toUpperCase() === 'BTC');
+    return btcHolding?.currentPrice || 0;
+  }
+
+  get rothIraRemainingContribution(): number {
+    return Math.max(this.rothIra.yearlyLimit - this.rothIra.contributionsYtd, 0);
+  }
+
+  get rothIraProjectedYearEndBalance(): number {
+    const annualRate = Math.max(this.rothIra.expectedAnnualReturn, 0) / 100;
+    const projectedGrowth = this.rothIra.currentBalance * annualRate;
+    const projectedContrib = this.rothIra.yearlyContribution;
+    const projectedMatch = projectedContrib * (Math.max(this.rothIra.employerMatchPercent, 0) / 100);
+    return this.rothIra.currentBalance + projectedGrowth + projectedContrib + projectedMatch;
   }
 
   get cryptoPortfolioValue(): number {
@@ -257,7 +329,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   get netWorth(): number {
-    return this.cashAndCardBalance + this.cryptoPortfolioValue;
+    return this.cashAndCardBalance + this.cryptoPortfolioValue + this.rothIra.currentBalance;
   }
 
   get totalLiquidAssets(): number {
@@ -359,12 +431,21 @@ export class AppComponent implements OnInit, OnDestroy {
         void this.saveState();
       }
     }, 45000);
+    this.cryptoSyncIntervalId = setInterval(() => {
+      if (this.isAuthenticated && !this.isCryptoSyncing) {
+        void this.refreshCryptoPrices();
+      }
+    }, 60000);
   }
 
   ngOnDestroy(): void {
     if (this.saveIntervalId) {
       clearInterval(this.saveIntervalId);
       this.saveIntervalId = null;
+    }
+    if (this.cryptoSyncIntervalId) {
+      clearInterval(this.cryptoSyncIntervalId);
+      this.cryptoSyncIntervalId = null;
     }
   }
 
@@ -533,6 +614,7 @@ export class AppComponent implements OnInit, OnDestroy {
         id: this.createId('inc'),
         source: this.newIncomeStream.source.trim(),
         frequency: this.newIncomeStream.frequency,
+        assetType: this.newIncomeStream.assetType,
         expectedAmount: Number(this.newIncomeStream.expectedAmount),
         receivedYtd: 0,
         nextPayout: this.newIncomeStream.nextPayout
@@ -542,6 +624,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.newIncomeStream = {
       source: '',
       frequency: 'monthly',
+      assetType: 'usd',
       expectedAmount: 0,
       nextPayout: this.today
     };
@@ -573,6 +656,34 @@ export class AppComponent implements OnInit, OnDestroy {
       averageCost: 0,
       currentPrice: 0,
       platform: ''
+    };
+    void this.refreshCryptoPrices();
+    this.markDirty();
+  }
+
+  addRothContribution(): void {
+    const amount = Number(this.newRothContribution);
+    if (amount <= 0) {
+      return;
+    }
+
+    this.rothIra = {
+      ...this.rothIra,
+      currentBalance: this.rothIra.currentBalance + amount,
+      contributionsYtd: this.rothIra.contributionsYtd + amount
+    };
+    this.newRothContribution = 0;
+    this.markDirty();
+  }
+
+  updateRothIraSettings(): void {
+    this.rothIra = {
+      currentBalance: Number(this.rothIra.currentBalance) || 0,
+      yearlyContribution: Number(this.rothIra.yearlyContribution) || 0,
+      yearlyLimit: Number(this.rothIra.yearlyLimit) || 7000,
+      employerMatchPercent: Number(this.rothIra.employerMatchPercent) || 0,
+      expectedAnnualReturn: Number(this.rothIra.expectedAnnualReturn) || 0,
+      contributionsYtd: Number(this.rothIra.contributionsYtd) || 0
     };
     this.markDirty();
   }
@@ -664,6 +775,14 @@ export class AppComponent implements OnInit, OnDestroy {
     this.passiveIncomeStreams = [];
     this.cryptoHoldings = [];
     this.savingsGoals = [];
+    this.rothIra = {
+      currentBalance: 0,
+      yearlyContribution: 0,
+      yearlyLimit: 7000,
+      employerMatchPercent: 0,
+      expectedAnnualReturn: 7,
+      contributionsYtd: 0
+    };
     void this.saveState();
   }
 
@@ -756,7 +875,66 @@ export class AppComponent implements OnInit, OnDestroy {
     if (n.includes('travel') || n.includes('vacation') || n.includes('hotel')) return '✈️';
     if (n.includes('cloth') || n.includes('shopping')) return '🛍️';
     if (n.includes('education') || n.includes('school') || n.includes('course')) return '📚';
+    if (n.includes('roth') || n.includes('ira') || n.includes('retirement')) return '🏛️';
     return '📂';
+  }
+
+  getPassiveStreamUsdPerYear(stream: PassiveIncomeStream): number {
+    const yearlyAmount = this.getCadenceFactorPerYear(stream.frequency) * stream.expectedAmount;
+    if (stream.assetType === 'btc') {
+      return yearlyAmount * this.btcUsdPrice;
+    }
+    return yearlyAmount;
+  }
+
+  getPassiveStreamUsdPerSecond(stream: PassiveIncomeStream): number {
+    return this.getPassiveStreamUsdPerYear(stream) / (365 * 24 * 60 * 60);
+  }
+
+  getPassiveStreamUnitLabel(stream: PassiveIncomeStream): string {
+    return stream.assetType === 'btc' ? 'BTC' : '$';
+  }
+
+  async refreshCryptoPrices(): Promise<void> {
+    const symbols = Array.from(new Set(this.cryptoHoldings.map(holding => holding.symbol.toUpperCase())));
+    if (!symbols.length) {
+      this.cryptoPriceStatus = 'Add holdings to enable live crypto pricing.';
+      return;
+    }
+
+    const ids = symbols
+      .map(symbol => this.symbolToCoinId[symbol])
+      .filter((id): id is string => Boolean(id));
+
+    if (!ids.length) {
+      this.cryptoPriceStatus = 'No supported symbols yet for live sync. Try BTC, ETH, SOL, ADA, XRP, DOGE.';
+      return;
+    }
+
+    this.isCryptoSyncing = true;
+    this.cryptoPriceStatus = 'Syncing live crypto prices...';
+
+    try {
+      const endpoint = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`;
+      const priceMap = await firstValueFrom(this.http.get<Record<string, { usd: number }>>(endpoint));
+
+      this.cryptoHoldings = this.cryptoHoldings.map(holding => {
+        const coinId = this.symbolToCoinId[holding.symbol.toUpperCase()];
+        const live = coinId ? priceMap[coinId]?.usd : null;
+        if (!live || Number.isNaN(live)) {
+          return holding;
+        }
+        return { ...holding, currentPrice: live };
+      });
+
+      this.lastCryptoSyncedAt = new Date().toISOString();
+      this.cryptoPriceStatus = `Live prices updated at ${new Date(this.lastCryptoSyncedAt).toLocaleTimeString()}.`;
+    } catch (error: unknown) {
+      this.cryptoPriceStatus = 'Live price sync failed. Existing prices are still shown.';
+      console.error(error);
+    } finally {
+      this.isCryptoSyncing = false;
+    }
   }
 
   private async restoreSession(): Promise<void> {
@@ -779,6 +957,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
       this.isAuthenticated = true;
       await this.loadState();
+      await this.refreshCryptoPrices();
     } catch (error: unknown) {
       console.error(error);
       this.signOut();
@@ -821,7 +1000,8 @@ export class AppComponent implements OnInit, OnDestroy {
       autoPayments: this.autoPayments,
       passiveIncomeStreams: this.passiveIncomeStreams,
       cryptoHoldings: this.cryptoHoldings,
-      savingsGoals: this.savingsGoals
+      savingsGoals: this.savingsGoals,
+      rothIra: this.rothIra
     };
   }
 
@@ -830,12 +1010,43 @@ export class AppComponent implements OnInit, OnDestroy {
     this.budgets = model.budgets || [];
     this.transactions = model.transactions || [];
     this.autoPayments = model.autoPayments || [];
-    this.passiveIncomeStreams = model.passiveIncomeStreams || [];
+    this.passiveIncomeStreams = (model.passiveIncomeStreams || []).map(stream => ({
+      ...stream,
+      frequency: stream.frequency || 'monthly',
+      assetType: stream.assetType || 'usd'
+    }));
     this.cryptoHoldings = model.cryptoHoldings || [];
     this.savingsGoals = (model.savingsGoals || []).map(goal => ({
       ...goal,
       startDate: goal.startDate || this.today
     }));
+    this.rothIra = {
+      currentBalance: model.rothIra?.currentBalance || 0,
+      yearlyContribution: model.rothIra?.yearlyContribution || 0,
+      yearlyLimit: model.rothIra?.yearlyLimit || 7000,
+      employerMatchPercent: model.rothIra?.employerMatchPercent || 0,
+      expectedAnnualReturn: model.rothIra?.expectedAnnualReturn || 7,
+      contributionsYtd: model.rothIra?.contributionsYtd || 0
+    };
+  }
+
+  private getCadenceFactorPerYear(frequency: PassiveIncomeStream['frequency']): number {
+    if (frequency === 'secondly') {
+      return 365 * 24 * 60 * 60;
+    }
+    if (frequency === 'daily') {
+      return 365;
+    }
+    if (frequency === 'weekly') {
+      return 52;
+    }
+    if (frequency === 'monthly') {
+      return 12;
+    }
+    if (frequency === 'quarterly') {
+      return 4;
+    }
+    return 1;
   }
 
   private monthsBetween(fromIso: string, toIso: string): number {
