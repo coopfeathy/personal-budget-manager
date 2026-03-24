@@ -44,6 +44,27 @@ interface PassiveIncomeStream {
   nextPayout: string;
 }
 
+interface PassivePayoutEvent {
+  id: string;
+  streamId: string;
+  amount: number;
+  assetType: 'usd' | 'btc';
+  paidAt: string;
+  note?: string;
+}
+
+interface CryptoPriceCacheEntry {
+  price: number;
+  source: 'coingecko' | 'coinbase' | 'cache';
+  fetchedAt: string;
+}
+
+interface CryptoHistoryPoint {
+  timestamp: number;
+  label: string;
+  price: number;
+}
+
 interface RothIraProfile {
   currentBalance: number;
   yearlyContribution: number;
@@ -95,7 +116,9 @@ interface FinanceStateModel {
   transactions: Transaction[];
   autoPayments: AutoPayment[];
   passiveIncomeStreams: PassiveIncomeStream[];
+  passivePayoutEvents: PassivePayoutEvent[];
   cryptoHoldings: CryptoHolding[];
+  cryptoPriceCache: Record<string, CryptoPriceCacheEntry>;
   savingsGoals: SavingsGoal[];
   rothIra: RothIraProfile;
 }
@@ -118,6 +141,8 @@ export class AppComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
   private saveIntervalId: ReturnType<typeof setInterval> | null = null;
   private cryptoSyncIntervalId: ReturnType<typeof setInterval> | null = null;
+  private notificationIntervalId: ReturnType<typeof setInterval> | null = null;
+  private lastNotificationAt: Record<string, number> = {};
 
   private readonly symbolToCoinId: Record<string, string> = {
     BTC: 'bitcoin',
@@ -158,6 +183,12 @@ export class AppComponent implements OnInit, OnDestroy {
   isCryptoSyncing = false;
   cryptoPriceStatus = 'Waiting for holdings to sync live prices.';
   lastCryptoSyncedAt: string | null = null;
+  notificationsEnabled = false;
+
+  cryptoHistoryRange: '7d' | '30d' | '1y' = '30d';
+  cryptoHistoryPoints: CryptoHistoryPoint[] = [];
+  isCryptoHistoryLoading = false;
+  cryptoHistoryStatus = 'Select a range to load real market history.';
 
   loginForm = {
     email: '',
@@ -174,7 +205,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
   passiveIncomeStreams: PassiveIncomeStream[] = [];
 
+  passivePayoutEvents: PassivePayoutEvent[] = [];
+
   cryptoHoldings: CryptoHolding[] = [];
+
+  cryptoPriceCache: Record<string, CryptoPriceCacheEntry> = {};
 
   savingsGoals: SavingsGoal[] = [];
 
@@ -188,6 +223,14 @@ export class AppComponent implements OnInit, OnDestroy {
   };
 
   newRothContribution = 0;
+
+  newPayoutEvent = {
+    streamId: '',
+    amount: 0,
+    assetType: 'usd' as 'usd' | 'btc',
+    paidAt: this.today,
+    note: ''
+  };
 
   connectionProviders: ConnectionProvider[] = [
     {
@@ -320,6 +363,37 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.rothIra.currentBalance + projectedGrowth + projectedContrib + projectedMatch;
   }
 
+  get rothContributionPaceWarning(): string {
+    if (!this.rothIra.yearlyLimit) {
+      return 'Set your annual limit to track contribution pace.';
+    }
+    if (this.rothIra.contributionsYtd > this.rothIra.yearlyLimit) {
+      return 'Warning: contributions exceed current yearly IRA limit.';
+    }
+
+    const dayOfYear = Math.max(this.getDayOfYear(new Date()), 1);
+    const paceAnnualized = (this.rothIra.contributionsYtd / dayOfYear) * 365;
+    if (paceAnnualized > this.rothIra.yearlyLimit) {
+      return 'Warning: current contribution pace may exceed annual limit.';
+    }
+    return 'On pace: current contribution rate is within annual limit.';
+  }
+
+  get rothIncomeGuidance(): string {
+    const income = Math.max(this.monthlyIncome, 0) * 12;
+    if (!income) {
+      return 'Log income to enable MAGI-based Roth IRA contribution guidance.';
+    }
+
+    if (income > 161000) {
+      return 'Income appears high for full direct Roth contribution (single filer). Consider backdoor Roth strategy with a tax advisor.';
+    }
+    if (income > 146000) {
+      return 'Income may be in phase-out range (single filer). You may have a reduced Roth contribution limit.';
+    }
+    return 'Income estimate suggests full direct Roth contribution eligibility for single filer range.';
+  }
+
   get cryptoPortfolioValue(): number {
     return this.cryptoHoldings.reduce((sum, holding) => sum + (holding.quantity * holding.currentPrice), 0);
   }
@@ -330,6 +404,60 @@ export class AppComponent implements OnInit, OnDestroy {
 
   get netWorth(): number {
     return this.cashAndCardBalance + this.cryptoPortfolioValue + this.rothIra.currentBalance;
+  }
+
+  get selectedChartSymbol(): string {
+    if (this.cryptoHoldings.find(item => item.symbol.toUpperCase() === 'BTC')) {
+      return 'BTC';
+    }
+    return this.cryptoHoldings[0]?.symbol?.toUpperCase() || 'BTC';
+  }
+
+  get selectedChartPriceNow(): number {
+    const matched = this.cryptoHoldings.find(item => item.symbol.toUpperCase() === this.selectedChartSymbol);
+    return matched?.currentPrice || 0;
+  }
+
+  get realizedPassiveIncomeUsdYtd(): number {
+    return this.passivePayoutEvents.reduce((sum, event) => {
+      if (event.assetType === 'btc') {
+        return sum + event.amount * this.btcUsdPrice;
+      }
+      return sum + event.amount;
+    }, 0);
+  }
+
+  get recentPayoutEvents(): PassivePayoutEvent[] {
+    return [...this.passivePayoutEvents]
+      .sort((a, b) => b.paidAt.localeCompare(a.paidAt))
+      .slice(0, 10);
+  }
+
+  get cryptoHistoryPath(): string {
+    if (this.cryptoHistoryPoints.length < 2) {
+      return '';
+    }
+
+    const prices = this.cryptoHistoryPoints.map(point => point.price);
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = Math.max(max - min, 1);
+    const width = 100;
+    const height = 36;
+
+    return this.cryptoHistoryPoints.map((point, idx) => {
+      const x = (idx / (this.cryptoHistoryPoints.length - 1)) * width;
+      const y = height - ((point.price - min) / range) * height;
+      return `${idx === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(' ');
+  }
+
+  get chartStartLabel(): string {
+    return this.cryptoHistoryPoints[0]?.label || '--';
+  }
+
+  get chartEndLabel(): string {
+    return this.cryptoHistoryPoints[this.cryptoHistoryPoints.length - 1]?.label || '--';
   }
 
   get totalLiquidAssets(): number {
@@ -436,6 +564,11 @@ export class AppComponent implements OnInit, OnDestroy {
         void this.refreshCryptoPrices();
       }
     }, 60000);
+    this.notificationIntervalId = setInterval(() => {
+      if (this.isAuthenticated && this.notificationsEnabled) {
+        this.runNotificationChecks();
+      }
+    }, 60000);
   }
 
   ngOnDestroy(): void {
@@ -446,6 +579,10 @@ export class AppComponent implements OnInit, OnDestroy {
     if (this.cryptoSyncIntervalId) {
       clearInterval(this.cryptoSyncIntervalId);
       this.cryptoSyncIntervalId = null;
+    }
+    if (this.notificationIntervalId) {
+      clearInterval(this.notificationIntervalId);
+      this.notificationIntervalId = null;
     }
   }
 
@@ -486,6 +623,33 @@ export class AppComponent implements OnInit, OnDestroy {
     this.isAuthenticated = false;
     this.authError = '';
     this.saveStatus = 'Signed out. Sign in to continue.';
+    this.notificationsEnabled = false;
+  }
+
+  async enableNotifications(): Promise<void> {
+    if (typeof Notification === 'undefined') {
+      this.saveStatus = 'Browser notifications are not supported on this device.';
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    this.notificationsEnabled = permission === 'granted';
+    this.saveStatus = this.notificationsEnabled
+      ? 'Notifications enabled.'
+      : 'Notifications were not granted.';
+  }
+
+  quickAdd(type: 'transaction' | 'budget' | 'contribution' | 'holding'): void {
+    const targetMap: Record<typeof type, string> = {
+      transaction: 'quick-transaction',
+      budget: 'quick-budget',
+      contribution: 'quick-contribution',
+      holding: 'quick-holding'
+    };
+    const element = document.getElementById(targetMap[type]);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   async saveState(): Promise<void> {
@@ -676,6 +840,53 @@ export class AppComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
 
+  addPassivePayoutEvent(): void {
+    if (!this.newPayoutEvent.streamId || this.newPayoutEvent.amount <= 0) {
+      return;
+    }
+
+    const stream = this.passiveIncomeStreams.find(item => item.id === this.newPayoutEvent.streamId);
+    if (!stream) {
+      return;
+    }
+
+    this.passivePayoutEvents = [
+      {
+        id: this.createId('pay'),
+        streamId: this.newPayoutEvent.streamId,
+        amount: Number(this.newPayoutEvent.amount),
+        assetType: this.newPayoutEvent.assetType,
+        paidAt: this.newPayoutEvent.paidAt,
+        note: this.newPayoutEvent.note?.trim() || undefined
+      },
+      ...this.passivePayoutEvents
+    ];
+
+    const usdAmount = this.newPayoutEvent.assetType === 'btc'
+      ? Number(this.newPayoutEvent.amount) * this.btcUsdPrice
+      : Number(this.newPayoutEvent.amount);
+
+    this.passiveIncomeStreams = this.passiveIncomeStreams.map(item =>
+      item.id === stream.id
+        ? { ...item, receivedYtd: item.receivedYtd + usdAmount }
+        : item
+    );
+
+    this.newPayoutEvent = {
+      streamId: this.passiveIncomeStreams[0]?.id || '',
+      amount: 0,
+      assetType: 'usd',
+      paidAt: this.today,
+      note: ''
+    };
+    this.markDirty();
+  }
+
+  removePayoutEvent(id: string): void {
+    this.passivePayoutEvents = this.passivePayoutEvents.filter(item => item.id !== id);
+    this.markDirty();
+  }
+
   updateRothIraSettings(): void {
     this.rothIra = {
       currentBalance: Number(this.rothIra.currentBalance) || 0,
@@ -746,6 +957,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   removeIncomeStream(id: string): void {
     this.passiveIncomeStreams = this.passiveIncomeStreams.filter(s => s.id !== id);
+    this.passivePayoutEvents = this.passivePayoutEvents.filter(event => event.streamId !== id);
     this.markDirty();
   }
 
@@ -773,7 +985,10 @@ export class AppComponent implements OnInit, OnDestroy {
     this.transactions = [];
     this.autoPayments = [];
     this.passiveIncomeStreams = [];
+    this.passivePayoutEvents = [];
     this.cryptoHoldings = [];
+    this.cryptoPriceCache = {};
+    this.cryptoHistoryPoints = [];
     this.savingsGoals = [];
     this.rothIra = {
       currentBalance: 0,
@@ -924,16 +1139,55 @@ export class AppComponent implements OnInit, OnDestroy {
         if (!live || Number.isNaN(live)) {
           return holding;
         }
+        this.cryptoPriceCache[holding.symbol.toUpperCase()] = {
+          price: live,
+          source: 'coingecko',
+          fetchedAt: new Date().toISOString()
+        };
         return { ...holding, currentPrice: live };
       });
 
       this.lastCryptoSyncedAt = new Date().toISOString();
       this.cryptoPriceStatus = `Live prices updated at ${new Date(this.lastCryptoSyncedAt).toLocaleTimeString()}.`;
     } catch (error: unknown) {
-      this.cryptoPriceStatus = 'Live price sync failed. Existing prices are still shown.';
+      await this.refreshCryptoPricesWithFallback(symbols);
       console.error(error);
     } finally {
       this.isCryptoSyncing = false;
+    }
+    await this.loadCryptoHistory(this.cryptoHistoryRange);
+  }
+
+  async loadCryptoHistory(range: '7d' | '30d' | '1y'): Promise<void> {
+    this.cryptoHistoryRange = range;
+    const symbol = this.selectedChartSymbol;
+    const coinId = this.symbolToCoinId[symbol];
+    if (!coinId) {
+      this.cryptoHistoryPoints = [];
+      this.cryptoHistoryStatus = `No historical source mapped for ${symbol}.`;
+      return;
+    }
+
+    const days = range === '7d' ? 7 : range === '30d' ? 30 : 365;
+    this.isCryptoHistoryLoading = true;
+    this.cryptoHistoryStatus = `Loading ${range} history for ${symbol}...`;
+
+    try {
+      const endpoint = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=${days}&interval=daily`;
+      const response = await firstValueFrom(this.http.get<{ prices: [number, number][] }>(endpoint));
+      const points = (response.prices || []).map(([timestamp, price]) => ({
+        timestamp,
+        price,
+        label: new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      }));
+
+      this.cryptoHistoryPoints = points;
+      this.cryptoHistoryStatus = `${symbol} ${range} history loaded from CoinGecko.`;
+    } catch (error: unknown) {
+      await this.loadCryptoHistoryWithFallback(symbol, range);
+      console.error(error);
+    } finally {
+      this.isCryptoHistoryLoading = false;
     }
   }
 
@@ -958,6 +1212,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.isAuthenticated = true;
       await this.loadState();
       await this.refreshCryptoPrices();
+      await this.loadCryptoHistory(this.cryptoHistoryRange);
     } catch (error: unknown) {
       console.error(error);
       this.signOut();
@@ -999,7 +1254,9 @@ export class AppComponent implements OnInit, OnDestroy {
       transactions: this.transactions,
       autoPayments: this.autoPayments,
       passiveIncomeStreams: this.passiveIncomeStreams,
+      passivePayoutEvents: this.passivePayoutEvents,
       cryptoHoldings: this.cryptoHoldings,
+      cryptoPriceCache: this.cryptoPriceCache,
       savingsGoals: this.savingsGoals,
       rothIra: this.rothIra
     };
@@ -1015,7 +1272,9 @@ export class AppComponent implements OnInit, OnDestroy {
       frequency: stream.frequency || 'monthly',
       assetType: stream.assetType || 'usd'
     }));
+    this.passivePayoutEvents = model.passivePayoutEvents || [];
     this.cryptoHoldings = model.cryptoHoldings || [];
+    this.cryptoPriceCache = model.cryptoPriceCache || {};
     this.savingsGoals = (model.savingsGoals || []).map(goal => ({
       ...goal,
       startDate: goal.startDate || this.today
@@ -1028,6 +1287,114 @@ export class AppComponent implements OnInit, OnDestroy {
       expectedAnnualReturn: model.rothIra?.expectedAnnualReturn || 7,
       contributionsYtd: model.rothIra?.contributionsYtd || 0
     };
+    this.newPayoutEvent.streamId = this.passiveIncomeStreams[0]?.id || '';
+  }
+
+  streamNameById(streamId: string): string {
+    return this.passiveIncomeStreams.find(item => item.id === streamId)?.source || 'Unknown stream';
+  }
+
+  private async refreshCryptoPricesWithFallback(symbols: string[]): Promise<void> {
+    const updates: Record<string, number> = {};
+
+    for (const symbol of symbols) {
+      try {
+        const endpoint = `https://api.coinbase.com/v2/prices/${symbol}-USD/spot`;
+        const response = await firstValueFrom(this.http.get<{ data?: { amount?: string } }>(endpoint));
+        const parsed = Number(response?.data?.amount || 0);
+        if (parsed > 0) {
+          updates[symbol] = parsed;
+          this.cryptoPriceCache[symbol] = {
+            price: parsed,
+            source: 'coinbase',
+            fetchedAt: new Date().toISOString()
+          };
+        }
+      } catch {
+        const cached = this.cryptoPriceCache[symbol]?.price;
+        if (cached) {
+          updates[symbol] = cached;
+        }
+      }
+    }
+
+    this.cryptoHoldings = this.cryptoHoldings.map(holding => {
+      const symbol = holding.symbol.toUpperCase();
+      const fallback = updates[symbol];
+      if (!fallback) {
+        return holding;
+      }
+      return { ...holding, currentPrice: fallback };
+    });
+
+    const hitCount = Object.keys(updates).length;
+    this.cryptoPriceStatus = hitCount
+      ? `Primary source limited. Updated ${hitCount} symbols via fallback/cache.`
+      : 'Price refresh failed across providers. Showing last known prices.';
+  }
+
+  private async loadCryptoHistoryWithFallback(symbol: string, range: '7d' | '30d' | '1y'): Promise<void> {
+    const granularity = range === '7d' ? 3600 : 86400;
+    const end = Math.floor(Date.now() / 1000);
+    const seconds = range === '7d' ? 7 * 86400 : range === '30d' ? 30 * 86400 : 365 * 86400;
+    const start = end - seconds;
+    const endpoint = `https://api.exchange.coinbase.com/products/${symbol}-USD/candles?granularity=${granularity}&start=${new Date(start * 1000).toISOString()}&end=${new Date(end * 1000).toISOString()}`;
+
+    try {
+      const candles = await firstValueFrom(this.http.get<number[][]>(endpoint));
+      const points = (candles || [])
+        .map(candle => {
+          const timestamp = candle[0] * 1000;
+          const close = candle[4];
+          return {
+            timestamp,
+            price: close,
+            label: new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+          };
+        })
+        .sort((a, b) => a.timestamp - b.timestamp);
+
+      this.cryptoHistoryPoints = points;
+      this.cryptoHistoryStatus = `${symbol} ${range} history loaded from fallback provider.`;
+    } catch {
+      this.cryptoHistoryPoints = [];
+      this.cryptoHistoryStatus = `Unable to load ${symbol} historical chart from providers.`;
+    }
+  }
+
+  private runNotificationChecks(): void {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      return;
+    }
+
+    if (this.rothIra.contributionsYtd > this.rothIra.yearlyLimit) {
+      this.dispatchNotification('roth-limit', 'Roth IRA limit alert', 'Your logged contributions appear above the annual limit.');
+    }
+
+    if (this.monthsOfRunway > 0 && this.monthsOfRunway < 3) {
+      this.dispatchNotification('runway', 'Runway warning', `Financial runway is ${this.monthsOfRunway.toFixed(1)} months.`);
+    }
+
+    const dueSoon = this.upcomingAutoPayments.find(item => item.dueDay <= new Date().getDate() + 1);
+    if (dueSoon) {
+      this.dispatchNotification('autopay', 'Auto-payment due soon', `${dueSoon.name} is due around day ${dueSoon.dueDay}.`);
+    }
+  }
+
+  private dispatchNotification(key: string, title: string, body: string): void {
+    const now = Date.now();
+    const last = this.lastNotificationAt[key] || 0;
+    if (now - last < 1000 * 60 * 60 * 6) {
+      return;
+    }
+    this.lastNotificationAt[key] = now;
+    new Notification(title, { body });
+  }
+
+  private getDayOfYear(date: Date): number {
+    const start = new Date(date.getFullYear(), 0, 0);
+    const diff = date.getTime() - start.getTime();
+    return Math.floor(diff / 86400000);
   }
 
   private getCadenceFactorPerYear(frequency: PassiveIncomeStream['frequency']): number {

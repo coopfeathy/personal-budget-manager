@@ -18,6 +18,7 @@
           <button type="button" class="btn-ghost btn-sm" (click)="saveState()" [disabled]="isSaving">
             {{ isSaving ? '&#9203; Saving...' : '&#128190; Save Now' }}
           </button>
+          <button type="button" class="btn-ghost btn-sm" (click)="enableNotifications()">Enable Alerts</button>
           <button type="button" class="btn-danger btn-sm" (click)="clearAllData()">&#128465; Clear All</button>
           <button type="button" class="btn-outline btn-sm" (click)="signOut()">Sign Out</button>
         </div>
@@ -95,25 +96,31 @@
 
       <article class="glass panel anim-in" style="--delay:0.12s">
         <div class="panel-head">
-          <h2>&#128200; Net Worth Trend</h2>
-          <span class="badge badge-teal">6-month view</span>
+          <h2>&#128200; Real Crypto Performance</h2>
+          <span class="badge badge-teal">{{ selectedChartSymbol }}</span>
         </div>
-        <p class="hint-text">Stacked breakdown: cash, crypto, and passive income value over time</p>
-        <div class="stacked-chart">
-          <div class="chart-column" *ngFor="let point of netWorthHistory">
-            <div class="chart-stack">
-              <span class="seg passive" [style.height.%]="getStackPercent(point, 'passive')"></span>
-              <span class="seg crypto"  [style.height.%]="getStackPercent(point, 'crypto')"></span>
-              <span class="seg cash"    [style.height.%]="getStackPercent(point, 'cash')"></span>
-            </div>
-            <small class="muted">{{ point.label }}</small>
+        <p class="hint-text">Historical market chart using free provider APIs (7d, 30d, 1y)</p>
+        <div class="chart-range-row">
+          <button type="button" class="btn-outline btn-sm" [class.active-chip]="cryptoHistoryRange === '7d'" (click)="loadCryptoHistory('7d')">7d</button>
+          <button type="button" class="btn-outline btn-sm" [class.active-chip]="cryptoHistoryRange === '30d'" (click)="loadCryptoHistory('30d')">30d</button>
+          <button type="button" class="btn-outline btn-sm" [class.active-chip]="cryptoHistoryRange === '1y'" (click)="loadCryptoHistory('1y')">1y</button>
+          <span class="muted">Now: {{ selectedChartPriceNow | currency }}</span>
+        </div>
+        <p class="muted" style="margin: 0 0 8px">{{ cryptoHistoryStatus }}</p>
+        <div class="history-chart-wrap" *ngIf="cryptoHistoryPoints.length > 1; else noHistory">
+          <svg viewBox="0 0 100 40" preserveAspectRatio="none" class="history-chart">
+            <path [attr.d]="cryptoHistoryPath" class="history-line"></path>
+          </svg>
+          <div class="history-axis">
+            <small>{{ chartStartLabel }}</small>
+            <small>{{ chartEndLabel }}</small>
           </div>
         </div>
-        <div class="chart-legend">
-          <span class="leg cash">Cash</span>
-          <span class="leg crypto">Crypto</span>
-          <span class="leg passive">Passive</span>
-        </div>
+        <ng-template #noHistory>
+          <div class="empty-state">
+            &#128200;<p>{{ isCryptoHistoryLoading ? 'Loading chart...' : 'No historical chart data yet.' }}</p>
+          </div>
+        </ng-template>
       </article>
     </section>
 
@@ -214,7 +221,7 @@
 
         <details class="add-form-toggle">
           <summary>+ Add Budget Category</summary>
-          <form class="inline-form" (ngSubmit)="addBudget()">
+          <form id="quick-budget" class="inline-form" (ngSubmit)="addBudget()">
             <input type="text" placeholder="Category name" [(ngModel)]="newBudget.name" [ngModelOptions]="{standalone: true}" />
             <input type="number" min="0" placeholder="Monthly limit" [(ngModel)]="newBudget.monthlyLimit" [ngModelOptions]="{standalone: true}" />
             <button type="submit" class="btn-primary">Add</button>
@@ -231,7 +238,7 @@
       </div>
       <p class="hint-text">Log income and expenses — the 10 most recent are shown below</p>
 
-      <form class="form-grid" (ngSubmit)="addTransaction()">
+      <form id="quick-transaction" class="form-grid" (ngSubmit)="addTransaction()">
         <div class="field"><label>Title</label>
           <input type="text" placeholder="e.g. Grocery run" [(ngModel)]="newTransaction.title" [ngModelOptions]="{standalone: true}" /></div>
         <div class="field"><label>Amount</label>
@@ -406,6 +413,10 @@
             <strong>{{ rothIra.expectedAnnualReturn | number:'1.1-2' }}%</strong>
           </div>
         </div>
+        <div class="tax-guidance" [class.warning-guidance]="rothContributionPaceWarning.includes('Warning')">
+          <p>{{ rothContributionPaceWarning }}</p>
+          <small>{{ rothIncomeGuidance }}</small>
+        </div>
 
         <form class="form-grid" (ngSubmit)="updateRothIraSettings()">
           <div class="field"><label>Current Balance</label>
@@ -425,7 +436,7 @@
           </div>
         </form>
 
-        <form class="inline-form inline-form-2" (ngSubmit)="addRothContribution()">
+        <form id="quick-contribution" class="inline-form inline-form-2" (ngSubmit)="addRothContribution()">
           <input type="number" min="0" step="any" placeholder="Contribution amount" [(ngModel)]="newRothContribution" [ngModelOptions]="{standalone: true}" />
           <button type="submit" class="btn-primary">Add Contribution</button>
         </form>
@@ -509,6 +520,53 @@
             <div class="full-col"><button type="submit" class="btn-primary">Add</button></div>
           </form>
         </details>
+
+        <details class="add-form-toggle">
+          <summary>+ Log Payout Event (Realized)</summary>
+          <form class="form-grid" (ngSubmit)="addPassivePayoutEvent()">
+            <div class="field"><label>Stream</label>
+              <select [(ngModel)]="newPayoutEvent.streamId" [ngModelOptions]="{standalone: true}">
+                <option value="">Select stream</option>
+                <option *ngFor="let stream of passiveIncomeStreams" [value]="stream.id">{{ stream.source }}</option>
+              </select></div>
+            <div class="field"><label>Asset</label>
+              <select [(ngModel)]="newPayoutEvent.assetType" [ngModelOptions]="{standalone: true}">
+                <option value="usd">USD</option>
+                <option value="btc">BTC</option>
+              </select></div>
+            <div class="field"><label>Amount</label>
+              <input type="number" min="0" step="any" [(ngModel)]="newPayoutEvent.amount" [ngModelOptions]="{standalone: true}" /></div>
+            <div class="field"><label>Paid Date</label>
+              <input type="date" [(ngModel)]="newPayoutEvent.paidAt" [ngModelOptions]="{standalone: true}" /></div>
+            <div class="field full-col"><label>Note</label>
+              <input type="text" placeholder="Optional memo" [(ngModel)]="newPayoutEvent.note" [ngModelOptions]="{standalone: true}" /></div>
+            <div class="full-col"><button type="submit" class="btn-primary">Log Payout</button></div>
+          </form>
+        </details>
+
+        <div class="ledger-summary">
+          <p><strong>Realized YTD:</strong> {{ realizedPassiveIncomeUsdYtd | currency }}</p>
+          <p><strong>Projected Yearly:</strong> {{ passiveIncomeYearlyEstimate | currency }}</p>
+        </div>
+
+        <div class="stack" *ngIf="recentPayoutEvents.length > 0; else noPayoutEvents">
+          <div class="row" *ngFor="let event of recentPayoutEvents">
+            <div class="row-left">
+              <span class="income-icon">&#128179;</span>
+              <div>
+                <h4>{{ streamNameById(event.streamId) }}</h4>
+                <p>{{ event.paidAt | date:'mediumDate' }} &bull; {{ event.assetType.toUpperCase() }} {{ event.note ? ('&bull; ' + event.note) : '' }}</p>
+              </div>
+            </div>
+            <div class="row-actions">
+              <strong class="positive">{{ event.assetType === 'btc' ? (event.amount | number:'1.4-8') + ' BTC' : (event.amount | currency) }}</strong>
+              <button type="button" class="remove-btn" (click)="removePayoutEvent(event.id)">&#215;</button>
+            </div>
+          </div>
+        </div>
+        <ng-template #noPayoutEvents>
+          <div class="empty-state">&#128179;<p>No payout events logged yet</p></div>
+        </ng-template>
       </article>
 
       <article class="glass panel anim-in" style="--delay:0.28s">
@@ -551,7 +609,7 @@
 
         <details class="add-form-toggle">
           <summary>+ Add Holding</summary>
-          <form class="form-grid" (ngSubmit)="addCryptoHolding()">
+          <form id="quick-holding" class="form-grid" (ngSubmit)="addCryptoHolding()">
             <div class="field"><label>Symbol</label>
               <input type="text" placeholder="BTC" [(ngModel)]="newCryptoHolding.symbol" [ngModelOptions]="{standalone: true}" /></div>
             <div class="field"><label>Asset Name</label>
@@ -597,6 +655,13 @@
         <div class="row"><span>&#9989; Enable MFA on every connected financial account</span></div>
       </div>
     </article>
+
+    <nav class="mobile-quick-actions" aria-label="Quick Add Actions">
+      <button type="button" (click)="quickAdd('transaction')">+ Txn</button>
+      <button type="button" (click)="quickAdd('budget')">+ Budget</button>
+      <button type="button" (click)="quickAdd('contribution')">+ Roth</button>
+      <button type="button" (click)="quickAdd('holding')">+ Coin</button>
+    </nav>
 
   </main>
 </ng-container>
