@@ -25,6 +25,15 @@
       </div>
     </section>
 
+    <section class="glass panel anim-in" style="--delay:0.01s">
+      <div class="page-switcher">
+        <button type="button" class="btn-outline btn-sm" [class.active-chip]="activePage === 'dashboard'" (click)="setActivePage('dashboard')">Dashboard</button>
+        <button type="button" class="btn-outline btn-sm" [class.active-chip]="activePage === 'walmart'" (click)="setActivePage('walmart')">Walmart List Tracker</button>
+      </div>
+    </section>
+
+    <ng-container *ngIf="activePage === 'dashboard'; else walmartPage">
+
     <!-- Hero / Combined Net Worth Header -->
     <section class="glass panel hero top-combined anim-in" style="--delay:0.05s">
       <div>
@@ -575,6 +584,10 @@
           <span class="badge badge-purple">{{ cryptoPortfolioValue | currency }}</span>
         </div>
         <p class="hint-text">Track coin holdings with live market prices (CoinGecko) and unrealized P&amp;L</p>
+        <div class="preset-crypto-row">
+          <span class="muted">Main cryptos:</span>
+          <button type="button" class="btn-outline btn-sm" *ngFor="let symbol of mainCryptoSymbols" (click)="addMainCryptoPreset(symbol)">{{ symbol }}</button>
+        </div>
         <div class="crypto-sync-row">
           <span class="muted">{{ cryptoPriceStatus }}</span>
           <button type="button" class="btn-ghost btn-sm" (click)="refreshCryptoPrices()" [disabled]="isCryptoSyncing">
@@ -628,6 +641,62 @@
       </article>
     </section>
 
+    <section class="grid-2">
+      <article class="glass panel anim-in" style="--delay:0.29s">
+        <div class="panel-head">
+          <h2>&#128274; Cold Wallet Auto Tracker</h2>
+          <span class="badge badge-teal">{{ trackedWalletCount }} wallets</span>
+        </div>
+        <p class="hint-text">Track balances and transaction counts for offline wallet addresses using free chain APIs</p>
+        <div class="crypto-sync-row">
+          <span class="muted">{{ walletSyncStatus }}</span>
+          <button type="button" class="btn-ghost btn-sm" (click)="syncWalletTrackers()" [disabled]="isWalletSyncing">
+            {{ isWalletSyncing ? 'Syncing...' : 'Sync Wallets' }}
+          </button>
+        </div>
+
+        <div class="stack" *ngIf="walletTrackers.length > 0; else noWalletTrackers">
+          <div class="row" *ngFor="let wallet of walletTrackers">
+            <div class="row-left">
+              <span class="row-icon">&#128179;</span>
+              <div>
+                <h4>{{ wallet.label }} ({{ wallet.chain }})</h4>
+                <p>{{ wallet.address }} &bull; Tx: {{ wallet.txCount }}</p>
+              </div>
+            </div>
+            <div class="row-actions">
+              <div style="text-align:right">
+                <strong>{{ wallet.balance | number:'1.4-8' }} {{ wallet.unit }}</strong>
+                <p class="muted" *ngIf="wallet.lastSyncedAt">{{ wallet.lastSyncedAt | date:'short' }}</p>
+              </div>
+              <button type="button" class="remove-btn" (click)="removeWalletTracker(wallet.id)">&#215;</button>
+            </div>
+          </div>
+        </div>
+        <ng-template #noWalletTrackers>
+          <div class="empty-state">&#128274;<p>No cold wallets connected yet</p></div>
+        </ng-template>
+
+        <details class="add-form-toggle">
+          <summary>+ Add Cold Wallet Address</summary>
+          <form class="form-grid" (ngSubmit)="addWalletTracker()">
+            <div class="field"><label>Label</label>
+              <input type="text" placeholder="e.g. Ledger BTC" [(ngModel)]="newWalletTracker.label" [ngModelOptions]="{standalone: true}" /></div>
+            <div class="field"><label>Chain</label>
+              <select [(ngModel)]="newWalletTracker.chain" [ngModelOptions]="{standalone: true}">
+                <option value="bitcoin">Bitcoin</option>
+                <option value="ethereum">Ethereum</option>
+                <option value="litecoin">Litecoin</option>
+                <option value="dogecoin">Dogecoin</option>
+              </select></div>
+            <div class="field full-col"><label>Public Address</label>
+              <input type="text" placeholder="Paste public receive address" [(ngModel)]="newWalletTracker.address" [ngModelOptions]="{standalone: true}" /></div>
+            <div class="full-col"><button type="submit" class="btn-primary">Track Wallet</button></div>
+          </form>
+        </details>
+      </article>
+    </section>
+
     <!-- Smart Recommendations + Checklist -->
     <article class="glass panel accent-panel anim-in" style="--delay:0.3s">
       <div class="panel-head">
@@ -645,18 +714,53 @@
       <ng-template #noInsights>
         <div class="empty-state">&#128161;<p>Add financial data and insights will appear here</p></div>
       </ng-template>
-
-      <h3 style="margin:20px 0 8px;color:#f1f5f9">&#128274; Production Checklist</h3>
-      <p class="hint-text">Steps to keep this deployment secure and operational</p>
-      <div class="checklist">
-        <div class="row"><span>&#9989; Deploy frontend to Netlify static hosting</span></div>
-        <div class="row"><span>&#9989; Store secrets in Netlify environment variables</span></div>
-        <div class="row"><span>&#9989; Schedule nightly account sync via background function</span></div>
-        <div class="row"><span>&#9989; Enable MFA on every connected financial account</span></div>
-      </div>
     </article>
 
-    <nav class="mobile-quick-actions" aria-label="Quick Add Actions">
+    </ng-container>
+
+    <ng-template #walmartPage>
+      <section class="glass panel anim-in walmart-page" style="--delay:0.04s">
+        <div class="panel-head">
+          <h2>&#128722; Walmart Price Tracker</h2>
+          <span class="badge badge-teal">{{ walmartList.length }} items</span>
+        </div>
+        <p class="hint-text">Track your Walmart list with free lookup scraping and refresh current prices anytime</p>
+
+        <div class="crypto-sync-row">
+          <span class="muted">{{ walmartStatus }}</span>
+          <button type="button" class="btn-ghost btn-sm" (click)="refreshWalmartPrices()" [disabled]="isWalmartLoading">
+            {{ isWalmartLoading ? 'Checking...' : 'Refresh Prices' }}
+          </button>
+        </div>
+
+        <form class="inline-form inline-form-2" (ngSubmit)="addWalmartItem()">
+          <input type="text" placeholder="Add product name (e.g. Great Value Eggs)" [(ngModel)]="newWalmartItem.query" [ngModelOptions]="{standalone: true}" />
+          <button type="submit" class="btn-primary">Add Item</button>
+        </form>
+
+        <div class="stack mt-s" *ngIf="walmartList.length > 0; else noWalmartItems">
+          <div class="row" *ngFor="let item of walmartList">
+            <div class="row-left">
+              <span class="row-icon">&#128717;</span>
+              <div>
+                <h4>{{ item.productName || item.query }}</h4>
+                <p>{{ item.lastCheckedAt ? (item.lastCheckedAt | date:'short') : 'Not checked yet' }}</p>
+                <p *ngIf="item.productUrl"><a [href]="item.productUrl" target="_blank" rel="noopener">Open product</a></p>
+              </div>
+            </div>
+            <div class="row-actions">
+              <strong>{{ item.currentPrice === null ? 'N/A' : (item.currentPrice | currency:item.currency) }}</strong>
+              <button type="button" class="remove-btn" (click)="removeWalmartItem(item.id)">&#215;</button>
+            </div>
+          </div>
+        </div>
+        <ng-template #noWalmartItems>
+          <div class="empty-state">&#128722;<p>No Walmart items yet</p></div>
+        </ng-template>
+      </section>
+    </ng-template>
+
+    <nav class="mobile-quick-actions" aria-label="Quick Add Actions" *ngIf="activePage === 'dashboard'">
       <button type="button" (click)="quickAdd('transaction')">+ Txn</button>
       <button type="button" (click)="quickAdd('budget')">+ Budget</button>
       <button type="button" (click)="quickAdd('contribution')">+ Roth</button>

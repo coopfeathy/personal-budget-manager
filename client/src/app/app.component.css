@@ -523,6 +523,29 @@ textarea { resize: vertical; }
   flex-wrap: wrap;
 }
 
+.page-switcher {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.preset-crypto-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.walmart-page a {
+  color: #2dd4bf;
+  text-decoration: none;
+}
+
+.walmart-page a:hover {
+  text-decoration: underline;
+}
+
 .chart-range-row {
   display: flex;
   align-items: center;

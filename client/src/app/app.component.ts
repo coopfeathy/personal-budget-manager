@@ -110,6 +110,27 @@ interface ConnectionProvider {
   note: string;
 }
 
+interface WalletTracker {
+  id: string;
+  label: string;
+  chain: 'bitcoin' | 'ethereum' | 'litecoin' | 'dogecoin';
+  address: string;
+  balance: number;
+  unit: string;
+  txCount: number;
+  lastSyncedAt?: string;
+}
+
+interface WalmartListItem {
+  id: string;
+  query: string;
+  currentPrice: number | null;
+  currency: string;
+  productName: string;
+  productUrl: string;
+  lastCheckedAt?: string;
+}
+
 interface FinanceStateModel {
   accounts: Account[];
   budgets: BudgetCategory[];
@@ -119,6 +140,8 @@ interface FinanceStateModel {
   passivePayoutEvents: PassivePayoutEvent[];
   cryptoHoldings: CryptoHolding[];
   cryptoPriceCache: Record<string, CryptoPriceCacheEntry>;
+  walletTrackers: WalletTracker[];
+  walmartList: WalmartListItem[];
   savingsGoals: SavingsGoal[];
   rothIra: RothIraProfile;
 }
@@ -142,21 +165,39 @@ export class AppComponent implements OnInit, OnDestroy {
   private saveIntervalId: ReturnType<typeof setInterval> | null = null;
   private cryptoSyncIntervalId: ReturnType<typeof setInterval> | null = null;
   private notificationIntervalId: ReturnType<typeof setInterval> | null = null;
+  private walletSyncIntervalId: ReturnType<typeof setInterval> | null = null;
   private lastNotificationAt: Record<string, number> = {};
 
   private readonly symbolToCoinId: Record<string, string> = {
     BTC: 'bitcoin',
     ETH: 'ethereum',
     SOL: 'solana',
+    BNB: 'binancecoin',
+    TRX: 'tron',
+    SUI: 'sui',
+    TON: 'the-open-network',
+    HBAR: 'hedera-hashgraph',
+    SHIB: 'shiba-inu',
+    PEPE: 'pepe',
+    NEAR: 'near',
+    APT: 'aptos',
     ADA: 'cardano',
     XRP: 'ripple',
     DOGE: 'dogecoin',
     AVAX: 'avalanche-2',
     MATIC: 'matic-network',
+    ICP: 'internet-computer',
+    ETC: 'ethereum-classic',
+    FIL: 'filecoin',
+    ALGO: 'algorand',
     DOT: 'polkadot',
     LINK: 'chainlink',
     LTC: 'litecoin',
     BCH: 'bitcoin-cash',
+    XMR: 'monero',
+    VET: 'vechain',
+    AAVE: 'aave',
+    INJ: 'injective-protocol',
     XLM: 'stellar',
     UNI: 'uniswap',
     ATOM: 'cosmos',
@@ -184,6 +225,7 @@ export class AppComponent implements OnInit, OnDestroy {
   cryptoPriceStatus = 'Waiting for holdings to sync live prices.';
   lastCryptoSyncedAt: string | null = null;
   notificationsEnabled = false;
+  activePage: 'dashboard' | 'walmart' = 'dashboard';
 
   cryptoHistoryRange: '7d' | '30d' | '1y' = '30d';
   cryptoHistoryPoints: CryptoHistoryPoint[] = [];
@@ -210,6 +252,16 @@ export class AppComponent implements OnInit, OnDestroy {
   cryptoHoldings: CryptoHolding[] = [];
 
   cryptoPriceCache: Record<string, CryptoPriceCacheEntry> = {};
+
+  walletTrackers: WalletTracker[] = [];
+
+  walmartList: WalmartListItem[] = [];
+
+  isWalletSyncing = false;
+  walletSyncStatus = 'Add a cold wallet address to auto track balances and transactions.';
+
+  isWalmartLoading = false;
+  walmartStatus = 'Add items to begin Walmart price tracking.';
 
   savingsGoals: SavingsGoal[] = [];
 
@@ -278,6 +330,16 @@ export class AppComponent implements OnInit, OnDestroy {
     averageCost: 0,
     currentPrice: 0,
     platform: ''
+  };
+
+  newWalletTracker = {
+    label: '',
+    chain: 'bitcoin' as WalletTracker['chain'],
+    address: ''
+  };
+
+  newWalmartItem = {
+    query: ''
   };
 
   newAccount = {
@@ -460,6 +522,17 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.cryptoHistoryPoints[this.cryptoHistoryPoints.length - 1]?.label || '--';
   }
 
+  get mainCryptoSymbols(): string[] {
+    return [
+      'BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'TRX',
+      'AVAX', 'DOT', 'MATIC', 'LINK', 'LTC', 'BCH', 'ATOM', 'UNI'
+    ];
+  }
+
+  get trackedWalletCount(): number {
+    return this.walletTrackers.length;
+  }
+
   get totalLiquidAssets(): number {
     return this.accounts
       .filter(account => account.type !== 'credit-card')
@@ -569,6 +642,11 @@ export class AppComponent implements OnInit, OnDestroy {
         this.runNotificationChecks();
       }
     }, 60000);
+    this.walletSyncIntervalId = setInterval(() => {
+      if (this.isAuthenticated && !this.isWalletSyncing && this.walletTrackers.length) {
+        void this.syncWalletTrackers();
+      }
+    }, 120000);
   }
 
   ngOnDestroy(): void {
@@ -583,6 +661,10 @@ export class AppComponent implements OnInit, OnDestroy {
     if (this.notificationIntervalId) {
       clearInterval(this.notificationIntervalId);
       this.notificationIntervalId = null;
+    }
+    if (this.walletSyncIntervalId) {
+      clearInterval(this.walletSyncIntervalId);
+      this.walletSyncIntervalId = null;
     }
   }
 
@@ -649,6 +731,169 @@ export class AppComponent implements OnInit, OnDestroy {
     const element = document.getElementById(targetMap[type]);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  setActivePage(page: 'dashboard' | 'walmart'): void {
+    this.activePage = page;
+  }
+
+  addMainCryptoPreset(symbol: string): void {
+    const normalized = symbol.toUpperCase();
+    if (this.cryptoHoldings.some(holding => holding.symbol.toUpperCase() === normalized)) {
+      return;
+    }
+
+    this.cryptoHoldings = [
+      ...this.cryptoHoldings,
+      {
+        id: this.createId('crypto'),
+        symbol: normalized,
+        assetName: normalized,
+        quantity: 0,
+        averageCost: 0,
+        currentPrice: this.cryptoPriceCache[normalized]?.price || 0,
+        platform: 'Cold wallet / exchange'
+      }
+    ];
+    void this.refreshCryptoPrices();
+    this.markDirty();
+  }
+
+  addWalletTracker(): void {
+    if (!this.newWalletTracker.label.trim() || !this.newWalletTracker.address.trim()) {
+      return;
+    }
+
+    const unitMap: Record<WalletTracker['chain'], string> = {
+      bitcoin: 'BTC',
+      ethereum: 'ETH',
+      litecoin: 'LTC',
+      dogecoin: 'DOGE'
+    };
+
+    this.walletTrackers = [
+      {
+        id: this.createId('wallet'),
+        label: this.newWalletTracker.label.trim(),
+        chain: this.newWalletTracker.chain,
+        address: this.newWalletTracker.address.trim(),
+        balance: 0,
+        unit: unitMap[this.newWalletTracker.chain],
+        txCount: 0
+      },
+      ...this.walletTrackers
+    ];
+
+    this.newWalletTracker = {
+      label: '',
+      chain: 'bitcoin',
+      address: ''
+    };
+    void this.syncWalletTrackers();
+    this.markDirty();
+  }
+
+  removeWalletTracker(id: string): void {
+    this.walletTrackers = this.walletTrackers.filter(item => item.id !== id);
+    this.markDirty();
+  }
+
+  async syncWalletTrackers(): Promise<void> {
+    if (!this.walletTrackers.length) {
+      this.walletSyncStatus = 'Add a wallet to sync balances.';
+      return;
+    }
+
+    this.isWalletSyncing = true;
+    this.walletSyncStatus = 'Syncing cold-wallet balances and transactions...';
+
+    try {
+      const response = await firstValueFrom(this.http.post<{ ok: boolean; results: Array<{ id: string; balance: number; txCount: number; unit: string; syncedAt: string }>; message?: string }>(
+        '/api/wallet-track',
+        { wallets: this.walletTrackers }
+      ));
+
+      if (!response.ok) {
+        this.walletSyncStatus = response.message || 'Wallet sync failed.';
+        return;
+      }
+
+      const byId = new Map(response.results.map(item => [item.id, item]));
+      this.walletTrackers = this.walletTrackers.map(wallet => {
+        const match = byId.get(wallet.id);
+        if (!match) {
+          return wallet;
+        }
+        return {
+          ...wallet,
+          balance: match.balance,
+          txCount: match.txCount,
+          unit: match.unit,
+          lastSyncedAt: match.syncedAt
+        };
+      });
+
+      this.walletSyncStatus = `Wallet sync complete for ${response.results.length} wallet(s).`;
+    } catch (error: unknown) {
+      this.walletSyncStatus = 'Wallet sync failed. Check wallet addresses and network connectivity.';
+      console.error(error);
+    } finally {
+      this.isWalletSyncing = false;
+    }
+  }
+
+  addWalmartItem(): void {
+    if (!this.newWalmartItem.query.trim()) {
+      return;
+    }
+
+    this.walmartList = [
+      {
+        id: this.createId('wmt'),
+        query: this.newWalmartItem.query.trim(),
+        currentPrice: null,
+        currency: 'USD',
+        productName: '',
+        productUrl: ''
+      },
+      ...this.walmartList
+    ];
+    this.newWalmartItem.query = '';
+    void this.refreshWalmartPrices();
+    this.markDirty();
+  }
+
+  removeWalmartItem(id: string): void {
+    this.walmartList = this.walmartList.filter(item => item.id !== id);
+    this.markDirty();
+  }
+
+  async refreshWalmartPrices(): Promise<void> {
+    if (!this.walmartList.length) {
+      this.walmartStatus = 'Add an item to track Walmart pricing.';
+      return;
+    }
+
+    this.isWalmartLoading = true;
+    this.walmartStatus = 'Checking Walmart prices...';
+    try {
+      const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartListItem[]; message?: string }>('/api/walmart-prices', {
+        items: this.walmartList
+      }));
+
+      if (!response.ok) {
+        this.walmartStatus = response.message || 'Walmart price lookup failed.';
+        return;
+      }
+
+      this.walmartList = response.items;
+      this.walmartStatus = 'Walmart list refreshed.';
+    } catch (error: unknown) {
+      this.walmartStatus = 'Walmart lookup failed. Try again in a moment.';
+      console.error(error);
+    } finally {
+      this.isWalmartLoading = false;
     }
   }
 
@@ -989,6 +1234,8 @@ export class AppComponent implements OnInit, OnDestroy {
     this.cryptoHoldings = [];
     this.cryptoPriceCache = {};
     this.cryptoHistoryPoints = [];
+    this.walletTrackers = [];
+    this.walmartList = [];
     this.savingsGoals = [];
     this.rothIra = {
       currentBalance: 0,
@@ -1213,6 +1460,8 @@ export class AppComponent implements OnInit, OnDestroy {
       await this.loadState();
       await this.refreshCryptoPrices();
       await this.loadCryptoHistory(this.cryptoHistoryRange);
+      await this.syncWalletTrackers();
+      await this.refreshWalmartPrices();
     } catch (error: unknown) {
       console.error(error);
       this.signOut();
@@ -1257,6 +1506,8 @@ export class AppComponent implements OnInit, OnDestroy {
       passivePayoutEvents: this.passivePayoutEvents,
       cryptoHoldings: this.cryptoHoldings,
       cryptoPriceCache: this.cryptoPriceCache,
+      walletTrackers: this.walletTrackers,
+      walmartList: this.walmartList,
       savingsGoals: this.savingsGoals,
       rothIra: this.rothIra
     };
@@ -1275,6 +1526,8 @@ export class AppComponent implements OnInit, OnDestroy {
     this.passivePayoutEvents = model.passivePayoutEvents || [];
     this.cryptoHoldings = model.cryptoHoldings || [];
     this.cryptoPriceCache = model.cryptoPriceCache || {};
+    this.walletTrackers = model.walletTrackers || [];
+    this.walmartList = model.walmartList || [];
     this.savingsGoals = (model.savingsGoals || []).map(goal => ({
       ...goal,
       startDate: goal.startDate || this.today
