@@ -733,8 +733,21 @@
           </button>
         </div>
 
-        <form class="inline-form inline-form-2" (ngSubmit)="addWalmartItem()">
-          <input type="text" placeholder="Add product name (e.g. Great Value Eggs)" [(ngModel)]="newWalmartItem.query" [ngModelOptions]="{standalone: true}" />
+        <form class="inline-form inline-form-2 walmart-search-form" (ngSubmit)="addWalmartItem()">
+          <div class="walmart-input-wrap">
+            <input type="text" placeholder="Search Walmart products (e.g. Great Value Eggs)" [ngModel]="newWalmartItem.query" (ngModelChange)="onWalmartQueryInput($event)" [ngModelOptions]="{standalone: true}" autocomplete="off" />
+            <div class="walmart-suggest-dropdown" *ngIf="walmartSuggestions.length > 0">
+              <button
+                type="button"
+                class="walmart-suggest-item"
+                *ngFor="let suggestion of walmartSuggestions"
+                (click)="selectWalmartSuggestion(suggestion)">
+                <span>{{ suggestion.productName }}</span>
+                <small>{{ suggestion.price === null ? 'Price unavailable' : (suggestion.price | currency) }}</small>
+              </button>
+            </div>
+            <small class="muted" *ngIf="isWalmartSuggesting">Searching products...</small>
+          </div>
           <button type="submit" class="btn-primary">Add Item</button>
         </form>
 

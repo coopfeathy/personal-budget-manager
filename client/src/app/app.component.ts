@@ -131,6 +131,12 @@ interface WalmartListItem {
   lastCheckedAt?: string;
 }
 
+interface WalmartSuggestionItem {
+  productName: string;
+  price: number | null;
+  productUrl: string;
+}
+
 interface FinanceStateModel {
   accounts: Account[];
   budgets: BudgetCategory[];
@@ -166,6 +172,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private cryptoSyncIntervalId: ReturnType<typeof setInterval> | null = null;
   private notificationIntervalId: ReturnType<typeof setInterval> | null = null;
   private walletSyncIntervalId: ReturnType<typeof setInterval> | null = null;
+  private walmartSuggestTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private lastNotificationAt: Record<string, number> = {};
 
   private readonly symbolToCoinId: Record<string, string> = {
@@ -256,6 +263,10 @@ export class AppComponent implements OnInit, OnDestroy {
   walletTrackers: WalletTracker[] = [];
 
   walmartList: WalmartListItem[] = [];
+
+  walmartSuggestions: WalmartSuggestionItem[] = [];
+  selectedWalmartSuggestion: WalmartSuggestionItem | null = null;
+  isWalmartSuggesting = false;
 
   isWalletSyncing = false;
   walletSyncStatus = 'Add a cold wallet address to auto track balances and transactions.';
@@ -848,20 +859,51 @@ export class AppComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const selected = this.selectedWalmartSuggestion;
+    const queryText = this.newWalmartItem.query.trim();
+
     this.walmartList = [
       {
         id: this.createId('wmt'),
-        query: this.newWalmartItem.query.trim(),
-        currentPrice: null,
+        query: queryText,
+        currentPrice: selected?.price ?? null,
         currency: 'USD',
-        productName: '',
-        productUrl: ''
+        productName: selected?.productName || '',
+        productUrl: selected?.productUrl || ''
       },
       ...this.walmartList
     ];
     this.newWalmartItem.query = '';
+    this.walmartSuggestions = [];
+    this.selectedWalmartSuggestion = null;
     void this.refreshWalmartPrices();
     this.markDirty();
+  }
+
+  onWalmartQueryInput(value: string): void {
+    this.newWalmartItem.query = value;
+    this.selectedWalmartSuggestion = null;
+
+    if (this.walmartSuggestTimeoutId) {
+      clearTimeout(this.walmartSuggestTimeoutId);
+      this.walmartSuggestTimeoutId = null;
+    }
+
+    const query = value.trim();
+    if (query.length < 2) {
+      this.walmartSuggestions = [];
+      return;
+    }
+
+    this.walmartSuggestTimeoutId = setTimeout(() => {
+      void this.fetchWalmartSuggestions(query);
+    }, 250);
+  }
+
+  selectWalmartSuggestion(item: WalmartSuggestionItem): void {
+    this.selectedWalmartSuggestion = item;
+    this.newWalmartItem.query = item.productName;
+    this.walmartSuggestions = [];
   }
 
   removeWalmartItem(id: string): void {
@@ -894,6 +936,27 @@ export class AppComponent implements OnInit, OnDestroy {
       console.error(error);
     } finally {
       this.isWalmartLoading = false;
+    }
+  }
+
+  private async fetchWalmartSuggestions(query: string): Promise<void> {
+    this.isWalmartSuggesting = true;
+    try {
+      const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartSuggestionItem[]; message?: string }>(
+        '/api/walmart-search',
+        { query }
+      ));
+
+      if (!response.ok) {
+        this.walmartSuggestions = [];
+        return;
+      }
+
+      this.walmartSuggestions = response.items || [];
+    } catch {
+      this.walmartSuggestions = [];
+    } finally {
+      this.isWalmartSuggesting = false;
     }
   }
 
