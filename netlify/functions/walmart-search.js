@@ -24,13 +24,15 @@ function getAuthorizedEmail(event) {
 
 const WALMART_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
   'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
   'Cache-Control': 'no-cache',
   'Pragma': 'no-cache',
   'Sec-Fetch-Dest': 'document',
   'Sec-Fetch-Mode': 'navigate',
-  'Sec-Fetch-Site': 'same-origin'
+  'Sec-Fetch-Site': 'none',
+  'Upgrade-Insecure-Requests': '1'
 };
 
 function parsePrice(value) {
@@ -240,7 +242,17 @@ async function fetchAndParse(query, storeId) {
   }
 
   const html = await response.text();
-  console.log(`walmart-search: html size ${html.length} bytes`);
+  const htmlSize = html.length;
+  console.log(`walmart-search: html size ${htmlSize} bytes`);
+  
+  // Check if response has meaningful content
+  if (htmlSize < 5000) {
+    console.log(`walmart-search: WARNING - response is very small (${htmlSize} bytes), likely not a real search result`);
+  }
+  
+  const hasNextData = html.includes('__NEXT_DATA__');
+  const hasProductName = html.includes('"name":"') && html.includes('"canonicalUrl":"');
+  console.log(`walmart-search: has __NEXT_DATA__: ${hasNextData}, has product patterns: ${hasProductName}`);
   
   const resolvedStoreId = extractEffectiveStoreId(html) || storeId;
   console.log(`walmart-search: resolved store ID to ${resolvedStoreId}`);
