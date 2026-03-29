@@ -857,22 +857,45 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  addWalmartItem(): void {
-    if (!this.newWalmartItem.query.trim()) {
+  async addWalmartItem(): Promise<void> {
+    const queryText = this.newWalmartItem.query.trim();
+    if (!queryText) {
+      return;
+    }
+    if (!this.preferredWalmartStoreId) {
+      this.walmartStatus = 'Enter your Walmart store ID first so search stays local.';
       return;
     }
 
-    const selected = this.selectedWalmartSuggestion;
-    const queryText = this.newWalmartItem.query.trim();
+    let selected = this.selectedWalmartSuggestion;
+    if (!selected) {
+      if (!this.walmartSuggestions.length) {
+        await this.fetchWalmartSuggestions(queryText);
+      }
+      selected = this.walmartSuggestions[0] || null;
+    }
+
+    if (!selected) {
+      this.walmartStatus = `No similar item found for "${queryText}". Try a more specific name.`;
+      return;
+    }
+
+    if (selected.price === null && this.newWalmartItem.price === null) {
+      this.walmartStatus = `Found "${selected.productName}" but no store price was returned. Enter a price, then add.`;
+      this.selectedWalmartSuggestion = selected;
+      this.newWalmartItem.query = selected.productName;
+      this.walmartSuggestions = [];
+      return;
+    }
 
     this.walmartList = [
       {
         id: this.createId('wmt'),
         query: queryText,
-        currentPrice: this.newWalmartItem.price ?? selected?.price ?? null,
+        currentPrice: this.newWalmartItem.price ?? selected.price,
         currency: 'USD',
-        productName: selected?.productName || queryText,
-        productUrl: selected?.productUrl || ''
+        productName: selected.productName,
+        productUrl: selected.productUrl || ''
       },
       ...this.walmartList
     ];
