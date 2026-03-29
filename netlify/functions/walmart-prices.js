@@ -22,54 +22,62 @@ function getAuthorizedEmail(event) {
   return { ok: true, email: ownerEmail.toLowerCase() };
 }
 
-function firstMatch(regex, text) {
-  const match = text.match(regex);
-  return match ? match[1] : '';
+const WALMART_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Cache-Control': 'no-cache',
+  'Pragma': 'no-cache',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none'
+};
+
+function parsePrice(value) {
+  const n = Number(String(value || '').replace(/[$,]/g, '').trim());
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function decodeEscaped(value) {
-  if (!value) {
-    return '';
-  }
-  return value
-    .replace(/\\u002F/g, '/')
-    .replace(/\\u003C/g, '<')
-    .replace(/\\u003E/g, '>')
-    .replace(/\\"/g, '"')
-    .replace(/\\n/g, ' ')
-    .trim();
+function buildUrl(path) {
+  if (!path) return '';
+  return path.startsWith('http') ? path : `https://www.walmart.com${path}`;
 }
 
-async function lookupWalmart(query, fallback) {
-  const url = `https://www.walmart.com/search?q=${encodeURIComponent(query)}`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; PBM-PriceTracker/1.0)'
+function extractFirstFromNextData(html) {
+  try {
+    const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!m) return null;
+    const data = JSON.parse(m[1]);
+    const stacks = data?.props?.pageProps?.initialData?.searchResult?.itemStacks;
+    if (!Array.isArray(stacks)) return null;
+    for (const stack of stacks) {
+      for (const entry of (stack.items || [])) {
+        const p = entry?.item?.product;
+        if (!p) continue;
+        const name = String(p.name || '').trim();
+        const price = parsePrice(p.primaryOffer?.offerPrice);
+        const url = buildUrl(p.canonicalUrl);
+        if (name.length >= 3) {
+          return { currentPrice: price, productName: name, productUrl: url, currency: 'USD', lastCheckedAt: new Date().toISOString() };
+        }
+      }
     }
-  });
+  } catch (_) { /* fallthrough */ }
+  return null;
+}
 
-  if (!response.ok) {
-    throw new Error('Walmart lookup failed');
-  }
+function extractFirstFallback(html, fallbackName) {
+  const nameMatch = html.match(/"name":"([^"]{3,160})"/);
+  const priceMatch = html.match(/"(?:offerPrice|priceString)":"?\$?([0-9.,]+)"?/);
+  const urlMatch = html.match(/"canonicalUrl":"([^"]+)"/);
 
-  const html = await response.text();
-
-  const priceText = firstMatch(/"priceString":"\\$([0-9.,]+)"/, html);
-  const itemName = decodeEscaped(firstMatch(/"name":"([^\"]{3,160})"/, html)) || fallback;
-  const canonicalPath = decodeEscaped(firstMatch(/"canonicalUrl":"([^\"]+)"/, html));
-  const productUrl = canonicalPath
-    ? (canonicalPath.startsWith('http') ? canonicalPath : `https://www.walmart.com${canonicalPath}`)
-    : '';
-
-  const parsedPrice = Number(String(priceText || '').replace(/,/g, ''));
-  return {
-    currentPrice: Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : null,
-    productName: itemName,
-    productUrl,
-    currency: 'USD',
-    lastCheckedAt: new Date().toISOString()
-  };
+  const name = nameMatch
+    ? nameMatch[1].replace(/\\u[\dA-Fa-f]{4}/g, c => String.fromCharCode(parseInt(c.slice(2), 16))).trim()
+    : fallbackName;
+  const price = parsePrice(priceMatch?.[1]);
+  const url = buildUrl((urlMatch?.[1] || '').replace(/\\u002F/g, '/'));
+  return { currentPrice: price, productName: name, productUrl: url, currency: 'USD', lastCheckedAt: new Date().toISOString() };
 }
 
 exports.handler = async (event) => {
@@ -101,16 +109,14 @@ exports.handler = async (event) => {
   try {
     const updatedItems = await Promise.all(items.map(async (item) => {
       try {
-        const lookup = await lookupWalmart(item.query, item.query);
-        return {
-          ...item,
-          ...lookup
-        };
+        const searchUrl = `https://www.walmart.com/search?q=${encodeURIComponent(item.productName || item.query)}`;
+        const res = await fetch(searchUrl, { method: 'GET', headers: WALMART_HEADERS });
+        if (!res.ok) return { ...item, lastCheckedAt: new Date().toISOString() };
+        const html = await res.text();
+        const lookup = extractFirstFromNextData(html) || extractFirstFallback(html, item.productName || item.query);
+        return { ...item, ...lookup };
       } catch {
-        return {
-          ...item,
-          lastCheckedAt: new Date().toISOString()
-        };
+        return { ...item, lastCheckedAt: new Date().toISOString() };
       }
     }));
 

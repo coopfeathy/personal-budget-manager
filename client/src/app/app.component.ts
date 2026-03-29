@@ -919,10 +919,12 @@ export class AppComponent implements OnInit, OnDestroy {
 
     this.isWalmartLoading = true;
     this.walmartStatus = 'Checking Walmart prices...';
+    const walmartToken = localStorage.getItem(this.tokenStorageKey);
+    if (!walmartToken) { this.signOut(); return; }
     try {
       const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartListItem[]; message?: string }>('/api/walmart-prices', {
         items: this.walmartList
-      }));
+      }, { headers: { Authorization: `Bearer ${walmartToken}` } }));
 
       if (!response.ok) {
         this.walmartStatus = response.message || 'Walmart price lookup failed.';
@@ -941,10 +943,13 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private async fetchWalmartSuggestions(query: string): Promise<void> {
     this.isWalmartSuggesting = true;
+    const suggestToken = localStorage.getItem(this.tokenStorageKey);
+    if (!suggestToken) { this.walmartSuggestions = []; return; }
     try {
       const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartSuggestionItem[]; message?: string }>(
         '/api/walmart-search',
-        { query }
+        { query },
+        { headers: { Authorization: `Bearer ${suggestToken}` } }
       ));
 
       if (!response.ok) {

@@ -22,48 +22,72 @@ function getAuthorizedEmail(event) {
   return { ok: true, email: ownerEmail.toLowerCase() };
 }
 
-function decodeEscaped(value) {
-  if (!value) {
-    return '';
-  }
-  return value
-    .replace(/\\u002F/g, '/')
-    .replace(/\\u003C/g, '<')
-    .replace(/\\u003E/g, '>')
-    .replace(/\\"/g, '"')
-    .replace(/\\n/g, ' ')
-    .trim();
+const WALMART_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Cache-Control': 'no-cache',
+  'Pragma': 'no-cache',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none'
+};
+
+function parsePrice(value) {
+  const n = Number(String(value || '').replace(/[$,]/g, '').trim());
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function parsePrice(priceText) {
-  const cleaned = String(priceText || '').replace(/,/g, '').trim();
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+function buildUrl(path) {
+  if (!path) return '';
+  return path.startsWith('http') ? path : `https://www.walmart.com${path}`;
+}
+
+function extractCandidatesFromNextData(html) {
+  const results = [];
+  try {
+    const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!m) return results;
+    const data = JSON.parse(m[1]);
+    const stacks = data?.props?.pageProps?.initialData?.searchResult?.itemStacks;
+    if (!Array.isArray(stacks)) return results;
+    for (const stack of stacks) {
+      for (const entry of (stack.items || [])) {
+        if (results.length >= 12) break;
+        const p = entry?.item?.product;
+        if (!p) continue;
+        const name = String(p.name || '').trim();
+        const price = parsePrice(p.primaryOffer?.offerPrice);
+        const url = buildUrl(p.canonicalUrl);
+        if (name.length >= 3 && !results.find(r => r.productName === name)) {
+          results.push({ productName: name, price, productUrl: url });
+        }
+      }
+      if (results.length >= 12) break;
+    }
+  } catch (_) { /* fallthrough */ }
+  return results;
+}
+
+function extractCandidatesFallback(html) {
+  const results = [];
+  const regex = /"name":"([^"]{3,220})"[^}]{0,300}"(offerPrice|priceString)":"?\$?([0-9.,]+)"?[^}]{0,300}"canonicalUrl":"([^"]+)"/g;
+  let match;
+  while ((match = regex.exec(html)) && results.length < 12) {
+    const name = match[1].replace(/\\u[\dA-Fa-f]{4}/g, c => String.fromCharCode(parseInt(c.slice(2), 16))).trim();
+    const price = parsePrice(match[3]);
+    const url = buildUrl(match[4].replace(/\\u002F/g, '/'));
+    if (name && !results.find(r => r.productName === name)) {
+      results.push({ productName: name, price, productUrl: url });
+    }
+  }
+  return results;
 }
 
 function extractCandidates(html) {
-  const results = [];
-  const regex = /"name":"([^\"]{3,220})"[\s\S]{0,220}?"priceString":"\\$([0-9.,]+)"[\s\S]{0,220}?"canonicalUrl":"([^\"]+)"/g;
-  let match;
-
-  while ((match = regex.exec(html)) && results.length < 12) {
-    const productName = decodeEscaped(match[1]);
-    const price = parsePrice(match[2]);
-    const canonicalPath = decodeEscaped(match[3]);
-    if (!productName) {
-      continue;
-    }
-
-    const productUrl = canonicalPath
-      ? (canonicalPath.startsWith('http') ? canonicalPath : `https://www.walmart.com${canonicalPath}`)
-      : '';
-
-    if (!results.find(item => item.productName === productName)) {
-      results.push({ productName, price, productUrl });
-    }
-  }
-
-  return results;
+  const fromNext = extractCandidatesFromNextData(html);
+  return fromNext.length > 0 ? fromNext : extractCandidatesFallback(html);
 }
 
 exports.handler = async (event) => {
@@ -96,9 +120,7 @@ exports.handler = async (event) => {
     const url = `https://www.walmart.com/search?q=${encodeURIComponent(query)}`;
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; PBM-WalmartSearch/1.0)'
-      }
+      headers: WALMART_HEADERS
     });
 
     if (!response.ok) {
