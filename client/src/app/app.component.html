@@ -786,6 +786,14 @@
         <div *ngIf="walmartBrowseMode === 'browse'">
           <!-- Category Selection -->
           <div class="walmart-browse-categories" *ngIf="!walmartBrowseCategory">
+            <button
+              type="button"
+              class="browse-category-btn"
+              style="grid-column: 1 / -1; background: rgba(0, 244, 152, 0.15); border-color: rgba(0, 244, 152, 0.4);"
+              (click)="loadFullCatalog()"
+              [disabled]="isLoadingFullCatalog">
+              <span class="category-label" style="color: #00f498;">{{ isLoadingFullCatalog ? '📦 Loading full catalog...' : '📦 Browse ALL Products' }}</span>
+            </button>
             <div class="browse-grid">
               <button
                 type="button"
@@ -798,7 +806,37 @@
             </div>
           </div>
 
-          <!-- Browse Results -->
+          <!-- Full Catalog Results -->
+          <div *ngIf="walmartBrowseMode === 'full-catalog' && walmartFullCatalog.length > 0">
+            <button type="button" class="btn-outline btn-sm" (click)="closeBrowse()" style="margin-bottom: 12px;">← Back to Browse Options</button>
+            <div class="browse-products-grid">
+              <div class="browse-product-card" *ngFor="let product of walmartFullCatalog">
+                <div class="product-info">
+                  <h4>{{ product.productName }}</h4>
+                  <p class="product-price">{{ product.price === null ? 'Check store' : (product.price | currency) }}</p>
+                </div>
+                <button
+                  type="button"
+                  class="btn-primary btn-sm"
+                  (click)="addFromBrowse(product)">
+                  + Add
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Full Catalog Loading -->
+          <div *ngIf="walmartBrowseMode === 'full-catalog' && isLoadingFullCatalog" class="empty-state">
+            <p>Loading all products from store #{{ preferredWalmartStoreId }}...</p>
+          </div>
+
+          <!-- Full Catalog Empty -->
+          <div *ngIf="walmartBrowseMode === 'full-catalog' && walmartFullCatalog.length === 0 && !isLoadingFullCatalog" class="empty-state">
+            <p>No products found in catalog</p>
+            <button type="button" class="btn-outline btn-sm" (click)="closeBrowse()">← Back to Browse Options</button>
+          </div>
+
+          <!-- Category Results -->
           <div *ngIf="walmartBrowseCategory && walmartBrowseResults.length > 0">
             <button type="button" class="btn-outline btn-sm" (click)="closeBrowse()" style="margin-bottom: 12px;">← Back to Categories</button>
             <div class="browse-products-grid">
@@ -817,13 +855,13 @@
             </div>
           </div>
 
-          <!-- No Results -->
+          <!-- Category No Results -->
           <div *ngIf="walmartBrowseCategory && walmartBrowseResults.length === 0 && !isWalmartSuggesting" class="empty-state">
             <p>No products found in this category</p>
             <button type="button" class="btn-outline btn-sm" (click)="closeBrowse()">← Back to Categories</button>
           </div>
 
-          <!-- Loading -->
+          <!-- Category Loading -->
           <div *ngIf="isWalmartSuggesting && walmartBrowseCategory" class="empty-state">
             <p>Loading products...</p>
           </div>

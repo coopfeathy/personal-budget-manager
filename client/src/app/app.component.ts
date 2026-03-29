@@ -356,9 +356,11 @@ export class AppComponent implements OnInit, OnDestroy {
     price: null as number | null
   };
 
-  walmartBrowseMode: 'search' | 'browse' = 'search';
+  walmartBrowseMode: 'search' | 'browse' | 'full-catalog' = 'search';
   walmartBrowseCategory: string | null = null;
   walmartBrowseResults: WalmartSuggestionItem[] = [];
+  walmartFullCatalog: WalmartSuggestionItem[] = [];
+  isLoadingFullCatalog = false;
   walmartBrowseCategories = [
     { id: 'eggs', label: 'Eggs & Dairy', query: 'eggs' },
     { id: 'bread', label: 'Bread & Bakery', query: 'bread' },
@@ -1077,10 +1079,71 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  async loadFullCatalog(): Promise<void> {
+    if (!this.preferredWalmartStoreId) {
+      this.walmartStatus = 'Enter your Walmart store ID first.';
+      return;
+    }
+
+    this.isLoadingFullCatalog = true;
+    this.walmartBrowseMode = 'full-catalog';
+    this.walmartFullCatalog = [];
+    const token = localStorage.getItem(this.tokenStorageKey);
+
+    if (!token) {
+      this.isLoadingFullCatalog = false;
+      return;
+    }
+
+    // Load all major product categories to build a comprehensive catalog
+    const categories = [
+      { query: 'eggs', label: 'Eggs & Dairy' },
+      { query: 'bread', label: 'Bread & Bakery' },
+      { query: 'fresh fruit', label: 'Produce' },
+      { query: 'chicken breast', label: 'Meat' },
+      { query: 'rice', label: 'Pantry' },
+      { query: 'chips', label: 'Snacks' },
+      { query: 'water', label: 'Beverages' },
+      { query: 'frozen vegetables', label: 'Frozen' }
+    ];
+
+    const allProducts = new Map<string, WalmartSuggestionItem>();
+
+    try {
+      for (const category of categories) {
+        const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartSuggestionItem[] }>(
+          '/api/walmart-search',
+          { query: category.query, storeId: this.preferredWalmartStoreId },
+          { headers: { Authorization: `Bearer ${token}` } }
+        ));
+
+        if (response.ok && response.items) {
+          for (const item of response.items) {
+            // Use product name as key to avoid duplicates
+            allProducts.set(item.productName, item);
+          }
+        }
+
+        this.walmartStatus = `Loading catalog... (${allProducts.size} products found)`;
+      }
+
+      this.walmartFullCatalog = Array.from(allProducts.values());
+      this.walmartStatus = `Showing ${this.walmartFullCatalog.length} products from store #${this.preferredWalmartStoreId}. Browse and click Add to build your shopping list.`;
+    } catch (error) {
+      this.walmartFullCatalog = [];
+      this.walmartStatus = 'Failed to load full catalog.';
+      console.error(error);
+    } finally {
+      this.isLoadingFullCatalog = false;
+    }
+  }
+
   closeBrowse(): void {
     this.walmartBrowseMode = 'search';
     this.walmartBrowseCategory = null;
     this.walmartBrowseResults = [];
+    this.walmartFullCatalog = [];
+    this.isLoadingFullCatalog = false;
   }
 
   addFromBrowse(product: WalmartSuggestionItem): void {
