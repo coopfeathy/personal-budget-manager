@@ -149,8 +149,22 @@ function extractEffectiveStoreId(html) {
   return '';
 }
 
-async function searchLocalWalmart(query, storeId) {
-  const url = `https://www.walmart.com/search?q=${encodeURIComponent(query)}&storeId=${encodeURIComponent(storeId)}`;
+function buildSearchUrl(query, storeId) {
+  return `https://www.walmart.com/search?q=${encodeURIComponent(query)}&storeId=${encodeURIComponent(storeId)}`;
+}
+
+function buildFallbackSuggestion(query, storeId) {
+  const cleaned = String(query || '').trim();
+  const pretty = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  return {
+    productName: `${pretty} (similar Walmart results)`,
+    price: null,
+    productUrl: buildSearchUrl(cleaned, storeId)
+  };
+}
+
+async function fetchAndParse(query, storeId) {
+  const url = buildSearchUrl(query, storeId);
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -161,7 +175,7 @@ async function searchLocalWalmart(query, storeId) {
   });
 
   if (!response.ok) {
-    return [];
+    return { items: [], resolvedStoreId: storeId };
   }
 
   const html = await response.text();
@@ -169,6 +183,28 @@ async function searchLocalWalmart(query, storeId) {
   const fromNextData = extractCandidatesFromNextData(html, storeId);
   const items = fromNextData.length ? fromNextData : extractCandidatesFallback(html, storeId);
   return { items, resolvedStoreId };
+}
+
+async function searchLocalWalmart(query, storeId) {
+  const primary = await fetchAndParse(query, storeId);
+  if (primary.items.length) {
+    return primary;
+  }
+
+  // Broad terms can be sparse in parsed payloads; retry with common retail intent suffixes.
+  const q = String(query || '').trim();
+  const retryQueries = [`${q} furniture`, `${q} desk`, `${q} set`];
+  for (const retryQuery of retryQueries) {
+    const retried = await fetchAndParse(retryQuery, storeId);
+    if (retried.items.length) {
+      return retried;
+    }
+  }
+
+  return {
+    items: [buildFallbackSuggestion(q, storeId)],
+    resolvedStoreId: primary.resolvedStoreId || storeId
+  };
 }
 
 exports.handler = async (event) => {
