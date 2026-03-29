@@ -148,6 +148,7 @@ interface FinanceStateModel {
   cryptoPriceCache: Record<string, CryptoPriceCacheEntry>;
   walletTrackers: WalletTracker[];
   walmartList: WalmartListItem[];
+  preferredWalmartStoreId?: string;
   savingsGoals: SavingsGoal[];
   rothIra: RothIraProfile;
 }
@@ -263,6 +264,7 @@ export class AppComponent implements OnInit, OnDestroy {
   walletTrackers: WalletTracker[] = [];
 
   walmartList: WalmartListItem[] = [];
+  preferredWalmartStoreId = '';
 
   walmartSuggestions: WalmartSuggestionItem[] = [];
   selectedWalmartSuggestion: WalmartSuggestionItem | null = null;
@@ -272,7 +274,7 @@ export class AppComponent implements OnInit, OnDestroy {
   walletSyncStatus = 'Add a cold wallet address to auto track balances and transactions.';
 
   isWalmartLoading = false;
-  walmartStatus = 'Add items to begin Walmart price tracking.';
+  walmartStatus = 'Enter your Walmart store ID to search only your local store.';
 
   savingsGoals: SavingsGoal[] = [];
 
@@ -882,6 +884,16 @@ export class AppComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
 
+  onPreferredWalmartStoreIdChange(value: string): void {
+    this.preferredWalmartStoreId = String(value || '').replace(/\D/g, '').slice(0, 6);
+    this.walmartSuggestions = [];
+    this.selectedWalmartSuggestion = null;
+    this.walmartStatus = this.preferredWalmartStoreId
+      ? `Using Walmart store #${this.preferredWalmartStoreId} for grocery search.`
+      : 'Enter your Walmart store ID to search only your local store.';
+    this.markDirty();
+  }
+
   onWalmartQueryInput(value: string): void {
     this.newWalmartItem.query = value;
     this.selectedWalmartSuggestion = null;
@@ -892,6 +904,12 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     const query = value.trim();
+    if (!this.preferredWalmartStoreId) {
+      this.walmartSuggestions = [];
+      this.walmartStatus = 'Enter your Walmart store ID first so search stays local.';
+      return;
+    }
+
     if (query.length < 2) {
       this.walmartSuggestions = [];
       return;
@@ -946,22 +964,37 @@ export class AppComponent implements OnInit, OnDestroy {
   private async fetchWalmartSuggestions(query: string): Promise<void> {
     this.isWalmartSuggesting = true;
     const suggestToken = localStorage.getItem(this.tokenStorageKey);
-    if (!suggestToken) { this.walmartSuggestions = []; return; }
+    if (!suggestToken) {
+      this.walmartSuggestions = [];
+      this.isWalmartSuggesting = false;
+      return;
+    }
+    if (!this.preferredWalmartStoreId) {
+      this.walmartSuggestions = [];
+      this.walmartStatus = 'Enter your Walmart store ID first so search stays local.';
+      this.isWalmartSuggesting = false;
+      return;
+    }
     try {
       const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartSuggestionItem[]; message?: string }>(
         '/api/walmart-search',
-        { query },
+        { query, storeId: this.preferredWalmartStoreId },
         { headers: { Authorization: `Bearer ${suggestToken}` } }
       ));
 
       if (!response.ok) {
         this.walmartSuggestions = [];
+        this.walmartStatus = response.message || 'Local Walmart search failed.';
         return;
       }
 
       this.walmartSuggestions = response.items || [];
+      this.walmartStatus = this.walmartSuggestions.length
+        ? `Showing matches from Walmart store #${this.preferredWalmartStoreId}.`
+        : `No matches found at Walmart store #${this.preferredWalmartStoreId} for "${query}".`;
     } catch {
       this.walmartSuggestions = [];
+      this.walmartStatus = 'Local Walmart search failed. Try again in a moment.';
     } finally {
       this.isWalmartSuggesting = false;
     }
@@ -1578,6 +1611,7 @@ export class AppComponent implements OnInit, OnDestroy {
       cryptoPriceCache: this.cryptoPriceCache,
       walletTrackers: this.walletTrackers,
       walmartList: this.walmartList,
+      preferredWalmartStoreId: this.preferredWalmartStoreId,
       savingsGoals: this.savingsGoals,
       rothIra: this.rothIra
     };
@@ -1598,6 +1632,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.cryptoPriceCache = model.cryptoPriceCache || {};
     this.walletTrackers = model.walletTrackers || [];
     this.walmartList = model.walmartList || [];
+    this.preferredWalmartStoreId = String(model.preferredWalmartStoreId || '');
     this.savingsGoals = (model.savingsGoals || []).map(goal => ({
       ...goal,
       startDate: goal.startDate || this.today
@@ -1610,6 +1645,9 @@ export class AppComponent implements OnInit, OnDestroy {
       expectedAnnualReturn: model.rothIra?.expectedAnnualReturn || 7,
       contributionsYtd: model.rothIra?.contributionsYtd || 0
     };
+    this.walmartStatus = this.preferredWalmartStoreId
+      ? `Using Walmart store #${this.preferredWalmartStoreId} for grocery search.`
+      : 'Enter your Walmart store ID to search only your local store.';
     this.newPayoutEvent.streamId = this.passiveIncomeStreams[0]?.id || '';
   }
 

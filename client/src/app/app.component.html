@@ -724,15 +724,27 @@
           <h2>&#128722; Grocery List</h2>
           <span class="badge badge-teal">{{ walmartList.length }} items</span>
         </div>
-        <p class="hint-text">Search millions of grocery products by name, select from suggestions, set a price and add to your list</p>
+        <p class="hint-text">Search only your local Walmart by store ID, then select a product and add it to your grocery list</p>
 
         <div class="crypto-sync-row">
           <span class="muted">{{ walmartStatus }}</span>
         </div>
 
+        <div class="inline-form inline-form-2 walmart-store-form">
+          <input
+            type="text"
+            placeholder="Local Walmart store ID (e.g. 3081)"
+            [ngModel]="preferredWalmartStoreId"
+            (ngModelChange)="onPreferredWalmartStoreIdChange($event)"
+            [ngModelOptions]="{standalone: true}"
+            inputmode="numeric"
+            autocomplete="off" />
+          <a class="walmart-store-link" href="https://www.walmart.com/store/finder" target="_blank" rel="noopener">Find store ID</a>
+        </div>
+
         <form class="inline-form walmart-search-form" (ngSubmit)="addWalmartItem()">
           <div class="walmart-input-wrap">
-            <input type="text" placeholder="Search products (e.g. Great Value Eggs)" [ngModel]="newWalmartItem.query" (ngModelChange)="onWalmartQueryInput($event)" [ngModelOptions]="{standalone: true}" autocomplete="off" />
+            <input type="text" placeholder="Search local Walmart products (e.g. Great Value Eggs)" [ngModel]="newWalmartItem.query" (ngModelChange)="onWalmartQueryInput($event)" [ngModelOptions]="{standalone: true}" autocomplete="off" />
             <div class="walmart-suggest-dropdown" *ngIf="walmartSuggestions.length > 0">
               <button
                 type="button"
@@ -740,7 +752,7 @@
                 *ngFor="let suggestion of walmartSuggestions"
                 (click)="selectWalmartSuggestion(suggestion)">
                 <span>{{ suggestion.productName }}</span>
-                <small>Tap to select</small>
+                <small>{{ suggestion.price === null ? 'Tap to select' : (suggestion.price | currency) }}</small>
               </button>
             </div>
             <small class="muted" *ngIf="isWalmartSuggesting">Searching products...</small>

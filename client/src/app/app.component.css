@@ -426,6 +426,26 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 .inline-form-2 {
   grid-template-columns: 1fr auto;
 }
+.walmart-store-form {
+  margin-top: 12px;
+}
+.walmart-store-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(45, 212, 191, 0.25);
+  background: rgba(45, 212, 191, 0.08);
+  color: #99f6e4;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.walmart-store-link:hover {
+  border-color: rgba(45, 212, 191, 0.4);
+  background: rgba(45, 212, 191, 0.12);
+}
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field label { font-size: 0.8rem; color: #94a3b8; font-weight: 500; }
 
