@@ -133,7 +133,6 @@ function extractCandidatesFromNextData(html, storeId) {
 }
 
 function extractCandidatesFallback(html, storeId) {
-  const strictResults = [];
   const looseResults = [];
   
   // Primary regex pattern - look for name, price, and URL
@@ -183,8 +182,36 @@ function extractCandidatesFallback(html, storeId) {
     
     if (ultraMatches > 0) {
       console.log(`walmart-search fallback: ultra-lenient regex matched ${ultraMatches} items, captured ${looseResults.length}`);
-    } else {
-      console.log('walmart-search fallback: ultra-lenient regex also found nothing');
+    }
+  }
+
+  // Tertiary fallback: scan for all /ip/ URLs and extract any strings near them as product names
+  if (looseResults.length === 0) {
+    console.log('walmart-search fallback: lenient regex failed, trying URL-based extraction');
+    
+    const ipUrlRegex = /"canonicalUrl":"(\/ip\/[^"]+)"/g;
+    let ipMatch;
+    let ipUrlCount = 0;
+    
+    while ((ipMatch = ipUrlRegex.exec(html)) && looseResults.length < 12) {
+      ipUrlCount++;
+      const canonicalUrl = decodeEscaped(ipMatch[1]);
+      const productUrl = buildProductUrl(canonicalUrl, storeId);
+      
+      // Try to find product name near this URL by looking backwards in the HTML
+      const beforeUrl = html.substring(Math.max(0, ipMatch.index - 500), ipMatch.index);
+      const nameMatch = beforeUrl.match(/"name":"([^"]{3,220})"\s*(?:[\s\S]{0,150})?$/);
+      
+      if (nameMatch && nameMatch[1]) {
+        const productName = decodeEscaped(nameMatch[1]);
+        if (!looseResults.find(item => item.productName === productName)) {
+          looseResults.push({ productName, price: null, productUrl });
+        }
+      }
+    }
+    
+    if (ipUrlCount > 0) {
+      console.log(`walmart-search fallback: found ${ipUrlCount} product URLs, extracted ${looseResults.length} names`);
     }
   }
 
