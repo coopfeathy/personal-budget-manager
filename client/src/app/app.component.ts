@@ -976,7 +976,7 @@ export class AppComponent implements OnInit, OnDestroy {
       return;
     }
     try {
-      const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartSuggestionItem[]; message?: string }>(
+      const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartSuggestionItem[]; resolvedStoreId?: string; message?: string }>(
         '/api/walmart-search',
         { query, storeId: this.preferredWalmartStoreId },
         { headers: { Authorization: `Bearer ${suggestToken}` } }
@@ -989,9 +989,12 @@ export class AppComponent implements OnInit, OnDestroy {
       }
 
       this.walmartSuggestions = response.items || [];
+      const activeStoreId = response.resolvedStoreId || this.preferredWalmartStoreId;
       this.walmartStatus = this.walmartSuggestions.length
-        ? `Showing matches from Walmart store #${this.preferredWalmartStoreId}.`
-        : `No matches found at Walmart store #${this.preferredWalmartStoreId} for "${query}".`;
+        ? (activeStoreId === this.preferredWalmartStoreId
+          ? `Showing matches from Walmart store #${activeStoreId}.`
+          : `Showing matches from Walmart store #${activeStoreId} (Walmart did not return inventory for #${this.preferredWalmartStoreId}).`)
+        : `No matches found at Walmart store #${activeStoreId} for "${query}".`;
     } catch {
       this.walmartSuggestions = [];
       this.walmartStatus = 'Local Walmart search failed. Try again in a moment.';

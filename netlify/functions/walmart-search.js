@@ -62,23 +62,24 @@ function buildProductUrl(canonicalUrl, storeId) {
 }
 
 function extractCandidatesFromNextData(html, storeId) {
-  const results = [];
+  const strictResults = [];
+  const looseResults = [];
   const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
   if (!match) {
-    return results;
+    return [];
   }
 
   try {
     const data = JSON.parse(match[1]);
     const stacks = data?.props?.pageProps?.initialData?.searchResult?.itemStacks;
     if (!Array.isArray(stacks)) {
-      return results;
+      return [];
     }
 
     for (const stack of stacks) {
       for (const entry of stack.items || []) {
-        if (results.length >= 12) {
-          return results;
+        if (strictResults.length >= 12 || looseResults.length >= 12) {
+          return strictResults.length ? strictResults : looseResults;
         }
 
         const product = entry?.item?.product;
@@ -87,9 +88,6 @@ function extractCandidatesFromNextData(html, storeId) {
         }
 
         const productStoreId = String(product?.storeId || product?.fulfillmentSummary?.[0]?.storeId || storeId || '');
-        if (storeId && productStoreId && productStoreId !== storeId) {
-          continue;
-        }
 
         const productName = String(product.name).trim();
         const price = parsePrice(
@@ -99,8 +97,13 @@ function extractCandidatesFromNextData(html, storeId) {
         );
         const productUrl = buildProductUrl(String(product.canonicalUrl), storeId);
 
-        if (productName.length >= 3 && !results.find(item => item.productName === productName)) {
-          results.push({ productName, price, productUrl });
+        if (productName.length < 3) {
+          continue;
+        }
+
+        const target = storeId && productStoreId === storeId ? strictResults : looseResults;
+        if (!target.find(item => item.productName === productName)) {
+          target.push({ productName, price, productUrl });
         }
       }
     }
@@ -108,31 +111,42 @@ function extractCandidatesFromNextData(html, storeId) {
     console.error('walmart-search next-data parse error', error);
   }
 
-  return results;
+  return strictResults.length ? strictResults : looseResults;
 }
 
 function extractCandidatesFallback(html, storeId) {
-  const results = [];
+  const strictResults = [];
+  const looseResults = [];
   const regex = /"name":"([^"]{3,220})"[\s\S]{0,320}?"priceString":"\\?\$?([0-9.,]+)"[\s\S]{0,320}?"canonicalUrl":"([^"]+)"[\s\S]{0,180}?"storeId":"?(\d+)"?/g;
   let match;
 
-  while ((match = regex.exec(html)) && results.length < 12) {
+  while ((match = regex.exec(html)) && strictResults.length < 12 && looseResults.length < 12) {
     const productStoreId = String(match[4] || '');
-    if (storeId && productStoreId && productStoreId !== storeId) {
-      continue;
-    }
 
     const productName = decodeEscaped(match[1]);
     const price = parsePrice(match[2]);
     const canonicalUrl = decodeEscaped(match[3]);
     const productUrl = buildProductUrl(canonicalUrl, storeId);
 
-    if (productName && !results.find(item => item.productName === productName)) {
-      results.push({ productName, price, productUrl });
+    const target = storeId && productStoreId === storeId ? strictResults : looseResults;
+    if (productName && !target.find(item => item.productName === productName)) {
+      target.push({ productName, price, productUrl });
     }
   }
 
-  return results;
+  return strictResults.length ? strictResults : looseResults;
+}
+
+function extractEffectiveStoreId(html) {
+  const fromCookie = html.match(/assortmentStoreId(?:%2B|\+)\s*(\d{3,6})/);
+  if (fromCookie?.[1]) {
+    return fromCookie[1];
+  }
+  const fromStoreField = html.match(/"storeId":"?(\d{3,6})"?/);
+  if (fromStoreField?.[1]) {
+    return fromStoreField[1];
+  }
+  return '';
 }
 
 async function searchLocalWalmart(query, storeId) {
@@ -151,8 +165,10 @@ async function searchLocalWalmart(query, storeId) {
   }
 
   const html = await response.text();
+  const resolvedStoreId = extractEffectiveStoreId(html) || storeId;
   const fromNextData = extractCandidatesFromNextData(html, storeId);
-  return fromNextData.length ? fromNextData : extractCandidatesFallback(html, storeId);
+  const items = fromNextData.length ? fromNextData : extractCandidatesFallback(html, storeId);
+  return { items, resolvedStoreId };
 }
 
 exports.handler = async (event) => {
@@ -188,8 +204,8 @@ exports.handler = async (event) => {
   }
 
   try {
-    const items = await searchLocalWalmart(query, storeId);
-    return json(200, { ok: true, items });
+    const { items, resolvedStoreId } = await searchLocalWalmart(query, storeId);
+    return json(200, { ok: true, items, resolvedStoreId });
   } catch (error) {
     console.error('walmart-search error', error);
     return json(500, { ok: false, message: 'Unable to search your local Walmart right now.' });
