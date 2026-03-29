@@ -66,6 +66,7 @@ function extractCandidatesFromNextData(html, storeId) {
   const looseResults = [];
   const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
   if (!match) {
+    console.log('walmart-search: no __NEXT_DATA__ found in response');
     return [];
   }
 
@@ -73,12 +74,18 @@ function extractCandidatesFromNextData(html, storeId) {
     const data = JSON.parse(match[1]);
     const stacks = data?.props?.pageProps?.initialData?.searchResult?.itemStacks;
     if (!Array.isArray(stacks)) {
+      console.log('walmart-search: itemStacks not found or not array', { stacksExists: !!data?.props?.pageProps?.initialData?.searchResult });
       return [];
     }
 
+    console.log(`walmart-search: found ${stacks.length} stacks in response`);
+    let itemsProcessed = 0;
+
     for (const stack of stacks) {
       for (const entry of stack.items || []) {
+        itemsProcessed++;
         if (strictResults.length >= 12 || looseResults.length >= 12) {
+          console.log(`walmart-search: reached result limit. strict=${strictResults.length}, loose=${looseResults.length}`);
           return strictResults.length ? strictResults : looseResults;
         }
 
@@ -87,8 +94,7 @@ function extractCandidatesFromNextData(html, storeId) {
           continue;
         }
 
-        const productStoreId = String(product?.storeId || product?.fulfillmentSummary?.[0]?.storeId || storeId || '');
-
+        const productStoreId = String(product?.storeId || product?.fulfillmentSummary?.[0]?.storeId || '');
         const productName = String(product.name).trim();
         const price = parsePrice(
           product?.priceInfo?.currentPrice?.price
@@ -101,12 +107,20 @@ function extractCandidatesFromNextData(html, storeId) {
           continue;
         }
 
-        const target = storeId && productStoreId === storeId ? strictResults : looseResults;
-        if (!target.find(item => item.productName === productName)) {
-          target.push({ productName, price, productUrl });
+        // Prefer exact store match, but accept unmatched results if no strict matches yet
+        if (productStoreId && storeId && productStoreId === storeId) {
+          if (!strictResults.find(item => item.productName === productName)) {
+            strictResults.push({ productName, price, productUrl });
+          }
+        } else {
+          if (!looseResults.find(item => item.productName === productName)) {
+            looseResults.push({ productName, price, productUrl });
+          }
         }
       }
     }
+
+    console.log(`walmart-search: processed ${itemsProcessed} items. strict=${strictResults.length}, loose=${looseResults.length}`);
   } catch (error) {
     console.error('walmart-search next-data parse error', error);
   }
@@ -117,10 +131,14 @@ function extractCandidatesFromNextData(html, storeId) {
 function extractCandidatesFallback(html, storeId) {
   const strictResults = [];
   const looseResults = [];
+  
+  // Primary regex pattern for standard product entries
   const regex = /"name":"([^"]{3,220})"[\s\S]{0,320}?"priceString":"\\?\$?([0-9.,]+)"[\s\S]{0,320}?"canonicalUrl":"([^"]+)"[\s\S]{0,180}?"storeId":"?(\d+)"?/g;
   let match;
+  let regexMatches = 0;
 
   while ((match = regex.exec(html)) && strictResults.length < 12 && looseResults.length < 12) {
+    regexMatches++;
     const productStoreId = String(match[4] || '');
 
     const productName = decodeEscaped(match[1]);
@@ -128,9 +146,47 @@ function extractCandidatesFallback(html, storeId) {
     const canonicalUrl = decodeEscaped(match[3]);
     const productUrl = buildProductUrl(canonicalUrl, storeId);
 
-    const target = storeId && productStoreId === storeId ? strictResults : looseResults;
-    if (productName && !target.find(item => item.productName === productName)) {
-      target.push({ productName, price, productUrl });
+    if (!productName) {
+      continue;
+    }
+
+    // Prefer exact store match, but accept unmatched results if no strict matches yet
+    if (productStoreId && storeId && productStoreId === storeId) {
+      if (!strictResults.find(item => item.productName === productName)) {
+        strictResults.push({ productName, price, productUrl });
+      }
+    } else {
+      if (!looseResults.find(item => item.productName === productName)) {
+        looseResults.push({ productName, price, productUrl });
+      }
+    }
+  }
+
+  console.log(`walmart-search fallback: matched ${regexMatches} items via primary regex. strict=${strictResults.length}, loose=${looseResults.length}`);
+
+  // Secondary fallback: look for product patterns even without storeId
+  if (strictResults.length === 0 && looseResults.length === 0) {
+    console.log('walmart-search fallback: primary regex failed, trying secondary patterns');
+    
+    // Try finding products with more lenient patterns
+    const altRegex = /"canonicalUrl":"([^"]+)"[\s\S]{0,200}?"name":"([^"]{3,220})"[\s\S]{0,200}?"priceString":"\\?\$?([0-9.,]+)?"/g;
+    let altMatch;
+    let altMatches = 0;
+    
+    while ((altMatch = altRegex.exec(html)) && looseResults.length < 12) {
+      altMatches++;
+      const canonicalUrl = decodeEscaped(altMatch[1]);
+      const productName = decodeEscaped(altMatch[2]);
+      const price = parsePrice(altMatch[3]);
+      const productUrl = buildProductUrl(canonicalUrl, storeId);
+
+      if (productName && !looseResults.find(item => item.productName === productName)) {
+        looseResults.push({ productName, price, productUrl });
+      }
+    }
+    
+    if (altMatches > 0) {
+      console.log(`walmart-search fallback: secondary regex matched ${altMatches} items, captured ${looseResults.length}`);
     }
   }
 
@@ -165,6 +221,8 @@ function buildFallbackSuggestion(query, storeId) {
 
 async function fetchAndParse(query, storeId) {
   const url = buildSearchUrl(query, storeId);
+  console.log(`walmart-search: fetching '${query}' for store ${storeId}`);
+  
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -174,33 +232,52 @@ async function fetchAndParse(query, storeId) {
     }
   });
 
+  console.log(`walmart-search: got response status ${response.status}`);
+
   if (!response.ok) {
+    console.log(`walmart-search: response not ok, treating as empty`);
     return { items: [], resolvedStoreId: storeId };
   }
 
   const html = await response.text();
+  console.log(`walmart-search: html size ${html.length} bytes`);
+  
   const resolvedStoreId = extractEffectiveStoreId(html) || storeId;
+  console.log(`walmart-search: resolved store ID to ${resolvedStoreId}`);
+  
   const fromNextData = extractCandidatesFromNextData(html, storeId);
+  console.log(`walmart-search: extracted ${fromNextData.length} items from __NEXT_DATA__`);
+  
   const items = fromNextData.length ? fromNextData : extractCandidatesFallback(html, storeId);
+  console.log(`walmart-search: final result: ${items.length} items`);
+  
   return { items, resolvedStoreId };
 }
 
 async function searchLocalWalmart(query, storeId) {
+  console.log(`walmart-search: starting search for '${query}' at store ${storeId}`);
+  
   const primary = await fetchAndParse(query, storeId);
+  
   if (primary.items.length) {
+    console.log(`walmart-search: primary search succeeded with ${primary.items.length} items`);
     return primary;
   }
 
   // Broad terms can be sparse in parsed payloads; retry with common retail intent suffixes.
+  console.log(`walmart-search: primary search returned no results, trying variants`);
   const q = String(query || '').trim();
   const retryQueries = [`${q} furniture`, `${q} desk`, `${q} set`];
   for (const retryQuery of retryQueries) {
+    console.log(`walmart-search: retry attempt with '${retryQuery}'`);
     const retried = await fetchAndParse(retryQuery, storeId);
     if (retried.items.length) {
+      console.log(`walmart-search: retry succeeded with ${retried.items.length} items`);
       return retried;
     }
   }
 
+  console.log(`walmart-search: all attempts failed, returning fallback suggestion`);
   return {
     items: [buildFallbackSuggestion(q, storeId)],
     resolvedStoreId: primary.resolvedStoreId || storeId
