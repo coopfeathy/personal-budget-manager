@@ -742,7 +742,28 @@
           <a class="walmart-store-link" href="https://www.walmart.com/store/finder" target="_blank" rel="noopener">Find store ID</a>
         </div>
 
-        <form class="inline-form walmart-search-form" (ngSubmit)="addWalmartItem()">
+        <!-- Browse Mode Toggle -->
+        <div class="inline-form" style="gap: 8px; margin-bottom: 12px;">
+          <button
+            type="button"
+            [class.btn-primary]="walmartBrowseMode === 'search'"
+            [class.btn-outline]="walmartBrowseMode !== 'search'"
+            (click)="walmartBrowseMode = 'search'"
+            class="btn-sm">
+            Search Products
+          </button>
+          <button
+            type="button"
+            [class.btn-primary]="walmartBrowseMode === 'browse'"
+            [class.btn-outline]="walmartBrowseMode !== 'browse'"
+            (click)="walmartBrowseMode = 'browse'"
+            class="btn-sm">
+            Browse by Category
+          </button>
+        </div>
+
+        <!-- Search Mode -->
+        <form class="inline-form walmart-search-form" (ngSubmit)="addWalmartItem()" *ngIf="walmartBrowseMode === 'search'">
           <div class="walmart-input-wrap">
             <input type="text" placeholder="Search local Walmart products (e.g. Great Value Eggs)" [ngModel]="newWalmartItem.query" (ngModelChange)="onWalmartQueryInput($event)" [ngModelOptions]="{standalone: true}" autocomplete="off" />
             <div class="walmart-suggest-dropdown" *ngIf="walmartSuggestions.length > 0">
@@ -761,6 +782,54 @@
           <button type="submit" class="btn-primary">Add Item</button>
         </form>
 
+        <!-- Browse Mode -->
+        <div *ngIf="walmartBrowseMode === 'browse'">
+          <!-- Category Selection -->
+          <div class="walmart-browse-categories" *ngIf="!walmartBrowseCategory">
+            <div class="browse-grid">
+              <button
+                type="button"
+                class="browse-category-btn"
+                *ngFor="let cat of walmartBrowseCategories"
+                (click)="browseWalmartCategory(cat.id, cat.query)"
+                [disabled]="isWalmartSuggesting">
+                <span class="category-label">{{ cat.label }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Browse Results -->
+          <div *ngIf="walmartBrowseCategory && walmartBrowseResults.length > 0">
+            <button type="button" class="btn-outline btn-sm" (click)="closeBrowse()" style="margin-bottom: 12px;">← Back to Categories</button>
+            <div class="browse-products-grid">
+              <div class="browse-product-card" *ngFor="let product of walmartBrowseResults">
+                <div class="product-info">
+                  <h4>{{ product.productName }}</h4>
+                  <p class="product-price">{{ product.price === null ? 'Check store' : (product.price | currency) }}</p>
+                </div>
+                <button
+                  type="button"
+                  class="btn-primary btn-sm"
+                  (click)="addFromBrowse(product)">
+                  + Add
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- No Results -->
+          <div *ngIf="walmartBrowseCategory && walmartBrowseResults.length === 0 && !isWalmartSuggesting" class="empty-state">
+            <p>No products found in this category</p>
+            <button type="button" class="btn-outline btn-sm" (click)="closeBrowse()">← Back to Categories</button>
+          </div>
+
+          <!-- Loading -->
+          <div *ngIf="isWalmartSuggesting && walmartBrowseCategory" class="empty-state">
+            <p>Loading products...</p>
+          </div>
+        </div>
+
+        <!-- Grocery List -->
         <div class="stack mt-s" *ngIf="walmartList.length > 0; else noWalmartItems">
           <div class="row" *ngFor="let item of walmartList">
             <div class="row-left">

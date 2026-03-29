@@ -773,6 +773,98 @@ textarea { resize: vertical; }
 .auth-form h1 { margin: 0 0 6px; font-size: 1.6rem; color: #f1f5f9; text-align: center; }
 .auth-error { color: #f87171; font-size: 0.86rem; text-align: center; margin-top: 4px; }
 
+/* ── Walmart Browse ── */
+.walmart-browse-categories {
+  display: grid;
+  gap: 12px;
+}
+
+.browse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.browse-category-btn {
+  background: rgba(45, 212, 191, 0.1);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  color: #2dd4bf;
+  padding: 14px 12px;
+  border-radius: 12px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+}
+
+.browse-category-btn:hover {
+  background: rgba(45, 212, 191, 0.2);
+  border-color: rgba(45, 212, 191, 0.5);
+  transform: translateY(-2px);
+}
+
+.browse-category-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.browse-products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.browse-product-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 140px;
+  transition: all 0.2s;
+}
+
+.browse-product-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(45, 212, 191, 0.4);
+}
+
+.browse-product-card .product-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+
+.browse-product-card h4 {
+  margin: 0 0 6px;
+  color: #f1f5f9;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.browse-product-card .product-price {
+  color: #2dd4bf;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.browse-product-card .btn-primary {
+  width: 100%;
+}
+
+.category-label {
+  display: block;
+  text-align: center;
+}
+
 /* ── Responsive ── */
 @media (max-width: 920px) {
   .hero { grid-template-columns: 1fr; }
@@ -824,4 +916,6 @@ textarea { resize: vertical; }
   .mobile-quick-actions {
     display: grid;
   }
+  .browse-grid { grid-template-columns: 1fr; }
+  .browse-products-grid { grid-template-columns: 1fr; }
 }

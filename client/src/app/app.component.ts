@@ -356,6 +356,20 @@ export class AppComponent implements OnInit, OnDestroy {
     price: null as number | null
   };
 
+  walmartBrowseMode: 'search' | 'browse' = 'search';
+  walmartBrowseCategory: string | null = null;
+  walmartBrowseResults: WalmartSuggestionItem[] = [];
+  walmartBrowseCategories = [
+    { id: 'eggs', label: 'Eggs & Dairy', query: 'eggs' },
+    { id: 'bread', label: 'Bread & Bakery', query: 'bread' },
+    { id: 'produce', label: 'Produce', query: 'fresh fruit' },
+    { id: 'meat', label: 'Meat & Seafood', query: 'chicken breast' },
+    { id: 'pantry', label: 'Pantry Staples', query: 'rice' },
+    { id: 'snacks', label: 'Snacks', query: 'chips' },
+    { id: 'drinks', label: 'Beverages', query: 'water' },
+    { id: 'frozen', label: 'Frozen Foods', query: 'frozen vegetables' }
+  ];
+
   newAccount = {
     name: '',
     institution: '',
@@ -1024,6 +1038,68 @@ export class AppComponent implements OnInit, OnDestroy {
     } finally {
       this.isWalmartSuggesting = false;
     }
+  }
+
+  async browseWalmartCategory(categoryId: string, categoryQuery: string): Promise<void> {
+    if (!this.preferredWalmartStoreId) {
+      this.walmartStatus = 'Enter your Walmart store ID first.';
+      return;
+    }
+
+    this.walmartBrowseCategory = categoryId;
+    this.isWalmartSuggesting = true;
+    const token = localStorage.getItem(this.tokenStorageKey);
+
+    if (!token) {
+      this.walmartBrowseResults = [];
+      this.isWalmartSuggesting = false;
+      return;
+    }
+
+    try {
+      const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartSuggestionItem[]; resolvedStoreId?: string; message?: string }>(
+        '/api/walmart-search',
+        { query: categoryQuery, storeId: this.preferredWalmartStoreId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      ));
+
+      this.walmartBrowseResults = response.ok ? (response.items || []) : [];
+      const activeStoreId = response.resolvedStoreId || this.preferredWalmartStoreId;
+      this.walmartStatus = this.walmartBrowseResults.length
+        ? `Showing ${this.walmartBrowseResults.length} products from store #${activeStoreId}.`
+        : `No products found in this category at store #${activeStoreId}.`;
+    } catch (error) {
+      this.walmartBrowseResults = [];
+      this.walmartStatus = 'Failed to load category products.';
+      console.error(error);
+    } finally {
+      this.isWalmartSuggesting = false;
+    }
+  }
+
+  closeBrowse(): void {
+    this.walmartBrowseMode = 'search';
+    this.walmartBrowseCategory = null;
+    this.walmartBrowseResults = [];
+  }
+
+  addFromBrowse(product: WalmartSuggestionItem): void {
+    if (!product.productName) {
+      return;
+    }
+
+    const listItem: WalmartListItem = {
+      id: `walmart-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      query: product.productName,
+      currentPrice: product.price,
+      currency: 'USD',
+      productName: product.productName,
+      productUrl: product.productUrl,
+      lastCheckedAt: new Date().toISOString()
+    };
+
+    this.walmartList = [listItem, ...this.walmartList];
+    this.walmartStatus = `Added "${product.productName}" to your grocery list.`;
   }
 
   async saveState(): Promise<void> {
