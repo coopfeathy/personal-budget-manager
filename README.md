@@ -10,6 +10,10 @@ Detailed personal finance application for tracking transactions, budgets, auto-p
 - Passive income stream planning and expected payout tracking
 - Crypto portfolio tracker with cost basis and profit/loss view
 - Account and card connection center with production integration checklist
+- Walmart store price lookup with shopping list builder
+  - Search products at your local Walmart with real-time pricing
+  - Browse full store inventory by category (8 product categories)
+  - One-click add to shopping list for easy meal planning
 
 ## Run Locally
 
@@ -66,6 +70,9 @@ For direct card/bank sync, use an aggregator provider such as Plaid. Keep creden
 - No database credentials are hardcoded in source files.
 - Use environment variables for all secrets.
 - Enable MFA for both exchange and banking accounts.
+- Mongoose upgraded to 9.3.3 with critical injection vulnerability fixes
+- All backend dependencies maintained at zero vulnerabilities
+- Node.js 22+ required for LTS compatibility (see .nvmrc)
 
 ## Netlify + Neon Database Notes
 
