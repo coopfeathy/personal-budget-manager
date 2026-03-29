@@ -64,8 +64,7 @@ function buildProductUrl(canonicalUrl, storeId) {
 }
 
 function extractCandidatesFromNextData(html, storeId) {
-  const strictResults = [];
-  const looseResults = [];
+  const results = [];
   const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
   if (!match) {
     console.log('walmart-search: no __NEXT_DATA__ found in response');
@@ -74,9 +73,20 @@ function extractCandidatesFromNextData(html, storeId) {
 
   try {
     const data = JSON.parse(match[1]);
-    const stacks = data?.props?.pageProps?.initialData?.searchResult?.itemStacks;
+    
+    // Try multiple possible paths in the data structure
+    let stacks = data?.props?.pageProps?.initialData?.searchResult?.itemStacks;
     if (!Array.isArray(stacks)) {
-      console.log('walmart-search: itemStacks not found or not array', { stacksExists: !!data?.props?.pageProps?.initialData?.searchResult });
+      // Try alternative path
+      stacks = data?.props?.pageProps?.searchResult?.itemStacks;
+    }
+    if (!Array.isArray(stacks)) {
+      // Try another alternative path
+      stacks = data?.props?.initialData?.itemStacks;
+    }
+    
+    if (!Array.isArray(stacks)) {
+      console.log('walmart-search: itemStacks not found in expected paths');
       return [];
     }
 
@@ -86,9 +96,9 @@ function extractCandidatesFromNextData(html, storeId) {
     for (const stack of stacks) {
       for (const entry of stack.items || []) {
         itemsProcessed++;
-        if (strictResults.length >= 12 || looseResults.length >= 12) {
-          console.log(`walmart-search: reached result limit. strict=${strictResults.length}, loose=${looseResults.length}`);
-          return strictResults.length ? strictResults : looseResults;
+        if (results.length >= 12) {
+          console.log(`walmart-search: reached result limit of 12`);
+          return results;
         }
 
         const product = entry?.item?.product;
@@ -96,7 +106,6 @@ function extractCandidatesFromNextData(html, storeId) {
           continue;
         }
 
-        const productStoreId = String(product?.storeId || product?.fulfillmentSummary?.[0]?.storeId || '');
         const productName = String(product.name).trim();
         const price = parsePrice(
           product?.priceInfo?.currentPrice?.price
@@ -109,39 +118,32 @@ function extractCandidatesFromNextData(html, storeId) {
           continue;
         }
 
-        // Prefer exact store match, but accept unmatched results if no strict matches yet
-        if (productStoreId && storeId && productStoreId === storeId) {
-          if (!strictResults.find(item => item.productName === productName)) {
-            strictResults.push({ productName, price, productUrl });
-          }
-        } else {
-          if (!looseResults.find(item => item.productName === productName)) {
-            looseResults.push({ productName, price, productUrl });
-          }
+        if (!results.find(item => item.productName === productName)) {
+          results.push({ productName, price, productUrl });
         }
       }
     }
 
-    console.log(`walmart-search: processed ${itemsProcessed} items. strict=${strictResults.length}, loose=${looseResults.length}`);
+    console.log(`walmart-search next-data: processed ${itemsProcessed} items, captured ${results.length} unique products`);
   } catch (error) {
     console.error('walmart-search next-data parse error', error);
   }
 
-  return strictResults.length ? strictResults : looseResults;
+  return results;
 }
 
 function extractCandidatesFallback(html, storeId) {
   const strictResults = [];
   const looseResults = [];
   
-  // Primary regex pattern for standard product entries
-  const regex = /"name":"([^"]{3,220})"[\s\S]{0,320}?"priceString":"\\?\$?([0-9.,]+)"[\s\S]{0,320}?"canonicalUrl":"([^"]+)"[\s\S]{0,180}?"storeId":"?(\d+)"?/g;
+  // Primary regex pattern - look for name, price, and URL
+  // Note: storeId is often not present in the HTML, so we don't require it
+  const regex = /"name":"([^"]{3,220})"[\s\S]{0,500}?"priceString":"\\?\$?([0-9.,]+)"[\s\S]{0,300}?"canonicalUrl":"([^"]+)"/g;
   let match;
   let regexMatches = 0;
 
-  while ((match = regex.exec(html)) && strictResults.length < 12 && looseResults.length < 12) {
+  while ((match = regex.exec(html)) && looseResults.length < 12) {
     regexMatches++;
-    const productStoreId = String(match[4] || '');
 
     const productName = decodeEscaped(match[1]);
     const price = parsePrice(match[2]);
@@ -152,47 +154,41 @@ function extractCandidatesFallback(html, storeId) {
       continue;
     }
 
-    // Prefer exact store match, but accept unmatched results if no strict matches yet
-    if (productStoreId && storeId && productStoreId === storeId) {
-      if (!strictResults.find(item => item.productName === productName)) {
-        strictResults.push({ productName, price, productUrl });
-      }
-    } else {
-      if (!looseResults.find(item => item.productName === productName)) {
-        looseResults.push({ productName, price, productUrl });
-      }
+    if (!looseResults.find(item => item.productName === productName)) {
+      looseResults.push({ productName, price, productUrl });
     }
   }
 
-  console.log(`walmart-search fallback: matched ${regexMatches} items via primary regex. strict=${strictResults.length}, loose=${looseResults.length}`);
+  console.log(`walmart-search fallback: matched ${regexMatches} items via primary regex, captured ${looseResults.length} unique products`);
 
-  // Secondary fallback: look for product patterns even without storeId
-  if (strictResults.length === 0 && looseResults.length === 0) {
-    console.log('walmart-search fallback: primary regex failed, trying secondary patterns');
+  // Secondary fallback: if we still have nothing, try an even more lenient pattern
+  if (looseResults.length === 0) {
+    console.log('walmart-search fallback: primary regex failed, trying very lenient patterns');
     
-    // Try finding products with more lenient patterns
-    const altRegex = /"canonicalUrl":"([^"]+)"[\s\S]{0,200}?"name":"([^"]{3,220})"[\s\S]{0,200}?"priceString":"\\?\$?([0-9.,]+)?"/g;
-    let altMatch;
-    let altMatches = 0;
+    // Ultra-lenient: just look for any name and URL combination
+    const ultraRegex = /"name":"([^"]{3,220})"[\s\S]{0,800}?"canonicalUrl":"(\/ip\/[^"]+)"/g;
+    let ultraMatch;
+    let ultraMatches = 0;
     
-    while ((altMatch = altRegex.exec(html)) && looseResults.length < 12) {
-      altMatches++;
-      const canonicalUrl = decodeEscaped(altMatch[1]);
-      const productName = decodeEscaped(altMatch[2]);
-      const price = parsePrice(altMatch[3]);
+    while ((ultraMatch = ultraRegex.exec(html)) && looseResults.length < 12) {
+      ultraMatches++;
+      const productName = decodeEscaped(ultraMatch[1]);
+      const canonicalUrl = decodeEscaped(ultraMatch[2]);
       const productUrl = buildProductUrl(canonicalUrl, storeId);
 
       if (productName && !looseResults.find(item => item.productName === productName)) {
-        looseResults.push({ productName, price, productUrl });
+        looseResults.push({ productName, price: null, productUrl });
       }
     }
     
-    if (altMatches > 0) {
-      console.log(`walmart-search fallback: secondary regex matched ${altMatches} items, captured ${looseResults.length}`);
+    if (ultraMatches > 0) {
+      console.log(`walmart-search fallback: ultra-lenient regex matched ${ultraMatches} items, captured ${looseResults.length}`);
+    } else {
+      console.log('walmart-search fallback: ultra-lenient regex also found nothing');
     }
   }
 
-  return strictResults.length ? strictResults : looseResults;
+  return looseResults;
 }
 
 function extractEffectiveStoreId(html) {
