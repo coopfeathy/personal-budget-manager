@@ -28,7 +28,7 @@
     <section class="glass panel anim-in" style="--delay:0.01s">
       <div class="page-switcher">
         <button type="button" class="btn-outline btn-sm" [class.active-chip]="activePage === 'dashboard'" (click)="setActivePage('dashboard')">Dashboard</button>
-        <button type="button" class="btn-outline btn-sm" [class.active-chip]="activePage === 'walmart'" (click)="setActivePage('walmart')">Walmart List Tracker</button>
+        <button type="button" class="btn-outline btn-sm" [class.active-chip]="activePage === 'walmart'" (click)="setActivePage('walmart')">Grocery List</button>
       </div>
     </section>
 
@@ -721,21 +721,18 @@
     <ng-template #walmartPage>
       <section class="glass panel anim-in walmart-page" style="--delay:0.04s">
         <div class="panel-head">
-          <h2>&#128722; Walmart Price Tracker</h2>
+          <h2>&#128722; Grocery List</h2>
           <span class="badge badge-teal">{{ walmartList.length }} items</span>
         </div>
-        <p class="hint-text">Track your Walmart list with free lookup scraping and refresh current prices anytime</p>
+        <p class="hint-text">Search millions of grocery products by name, select from suggestions, set a price and add to your list</p>
 
         <div class="crypto-sync-row">
           <span class="muted">{{ walmartStatus }}</span>
-          <button type="button" class="btn-ghost btn-sm" (click)="refreshWalmartPrices()" [disabled]="isWalmartLoading">
-            {{ isWalmartLoading ? 'Checking...' : 'Refresh Prices' }}
-          </button>
         </div>
 
-        <form class="inline-form inline-form-2 walmart-search-form" (ngSubmit)="addWalmartItem()">
+        <form class="inline-form walmart-search-form" (ngSubmit)="addWalmartItem()">
           <div class="walmart-input-wrap">
-            <input type="text" placeholder="Search Walmart products (e.g. Great Value Eggs)" [ngModel]="newWalmartItem.query" (ngModelChange)="onWalmartQueryInput($event)" [ngModelOptions]="{standalone: true}" autocomplete="off" />
+            <input type="text" placeholder="Search products (e.g. Great Value Eggs)" [ngModel]="newWalmartItem.query" (ngModelChange)="onWalmartQueryInput($event)" [ngModelOptions]="{standalone: true}" autocomplete="off" />
             <div class="walmart-suggest-dropdown" *ngIf="walmartSuggestions.length > 0">
               <button
                 type="button"
@@ -743,11 +740,12 @@
                 *ngFor="let suggestion of walmartSuggestions"
                 (click)="selectWalmartSuggestion(suggestion)">
                 <span>{{ suggestion.productName }}</span>
-                <small>{{ suggestion.price === null ? 'Price unavailable' : (suggestion.price | currency) }}</small>
+                <small>Tap to select</small>
               </button>
             </div>
             <small class="muted" *ngIf="isWalmartSuggesting">Searching products...</small>
           </div>
+          <input type="number" placeholder="$ Price" [(ngModel)]="newWalmartItem.price" [ngModelOptions]="{standalone: true}" step="0.01" min="0" style="max-width:110px" />
           <button type="submit" class="btn-primary">Add Item</button>
         </form>
 
@@ -757,8 +755,7 @@
               <span class="row-icon">&#128717;</span>
               <div>
                 <h4>{{ item.productName || item.query }}</h4>
-                <p>{{ item.lastCheckedAt ? (item.lastCheckedAt | date:'short') : 'Not checked yet' }}</p>
-                <p *ngIf="item.productUrl"><a [href]="item.productUrl" target="_blank" rel="noopener">Open product</a></p>
+                <p *ngIf="item.productUrl"><a [href]="item.productUrl" target="_blank" rel="noopener">View product info</a></p>
               </div>
             </div>
             <div class="row-actions">

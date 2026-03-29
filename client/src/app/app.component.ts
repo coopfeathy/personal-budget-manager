@@ -350,7 +350,8 @@ export class AppComponent implements OnInit, OnDestroy {
   };
 
   newWalmartItem = {
-    query: ''
+    query: '',
+    price: null as number | null
   };
 
   newAccount = {
@@ -866,17 +867,18 @@ export class AppComponent implements OnInit, OnDestroy {
       {
         id: this.createId('wmt'),
         query: queryText,
-        currentPrice: selected?.price ?? null,
+        currentPrice: this.newWalmartItem.price ?? selected?.price ?? null,
         currency: 'USD',
-        productName: selected?.productName || '',
+        productName: selected?.productName || queryText,
         productUrl: selected?.productUrl || ''
       },
       ...this.walmartList
     ];
     this.newWalmartItem.query = '';
+    this.newWalmartItem.price = null;
     this.walmartSuggestions = [];
     this.selectedWalmartSuggestion = null;
-    void this.refreshWalmartPrices();
+    this.walmartStatus = `${this.walmartList.length} item(s) on your grocery list.`;
     this.markDirty();
   }
 

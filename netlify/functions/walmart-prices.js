@@ -22,6 +22,36 @@ function getAuthorizedEmail(event) {
   return { ok: true, email: ownerEmail.toLowerCase() };
 }
 
+exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return optionsResponse();
+  }
+
+  if (event.httpMethod !== 'POST') {
+    return json(405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  const auth = getAuthorizedEmail(event);
+  if (!auth.ok) {
+    return json(auth.status, { ok: false, message: auth.message });
+  }
+
+  let body;
+  try {
+    body = JSON.parse(event.body || '{}');
+  } catch {
+    return json(400, { ok: false, message: 'Invalid JSON body.' });
+  }
+
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (!items.length) {
+    return json(200, { ok: true, items: [] });
+  }
+
+  // Prices are manually managed — return items unchanged
+  return json(200, { ok: true, items });
+};
+
 const WALMART_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -107,18 +137,8 @@ exports.handler = async (event) => {
   }
 
   try {
-    const updatedItems = await Promise.all(items.map(async (item) => {
-      try {
-        const searchUrl = `https://www.walmart.com/search?q=${encodeURIComponent(item.productName || item.query)}`;
-        const res = await fetch(searchUrl, { method: 'GET', headers: WALMART_HEADERS });
-        if (!res.ok) return { ...item, lastCheckedAt: new Date().toISOString() };
-        const html = await res.text();
-        const lookup = extractFirstFromNextData(html) || extractFirstFallback(html, item.productName || item.query);
-        return { ...item, ...lookup };
-      } catch {
-        return { ...item, lastCheckedAt: new Date().toISOString() };
-      }
-    }));
+    // Prices are manually tracked — return items as-is with updated timestamp
+    const updatedItems = items.map(item => ({ ...item, lastCheckedAt: new Date().toISOString() }));
 
     return json(200, { ok: true, items: updatedItems });
   } catch (error) {
