@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -1731,7 +1731,13 @@ export class AppComponent implements OnInit, OnDestroy {
       await this.syncWalletTrackers();
       await this.refreshWalmartPrices();
     } catch (error: unknown) {
-      console.error(error);
+      if (error instanceof HttpErrorResponse && error.status === 401) {
+        // Expired/invalid token is a normal signed-out state.
+        this.signOut();
+        return;
+      }
+
+      console.error('Session restore failed', error);
       this.signOut();
     }
   }
