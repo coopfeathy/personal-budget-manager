@@ -91,9 +91,20 @@ exports.handler = async (event) => {
     return json(405, { ok: false, message: 'Method not allowed.' });
   } catch (error) {
     console.error('finance-state error', error);
-    return json(500, {
+    // On DB connectivity / module errors, return a graceful degraded response
+    // so the client app continues to function without saved state.
+    if (event.httpMethod === 'GET') {
+      return json(200, {
+        ok: true,
+        state: null,
+        updatedAt: null,
+        degraded: true,
+        message: 'State service temporarily unavailable.'
+      });
+    }
+    return json(503, {
       ok: false,
-      message: 'Unable to process finance state request.',
+      message: 'State service temporarily unavailable. Your changes were not saved.',
       error: error.message
     });
   }

@@ -1,4 +1,9 @@
-const { Pool } = require('pg');
+let Pool;
+try {
+  Pool = require('pg').Pool;
+} catch (e) {
+  Pool = null;
+}
 
 let pool;
 
@@ -7,6 +12,10 @@ function getDatabaseUrl() {
 }
 
 function getPool() {
+  if (!Pool) {
+    throw new Error('pg module is not available (install failed or missing dependency).');
+  }
+
   if (!pool) {
     const connectionString = getDatabaseUrl();
 
