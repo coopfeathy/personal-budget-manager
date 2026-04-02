@@ -63,6 +63,85 @@ function buildProductUrl(canonicalUrl, storeId) {
   return `${baseUrl}${separator}storeId=${encodeURIComponent(storeId)}`;
 }
 
+function collectCandidate(results, productName, price, canonicalUrl, storeId) {
+  const cleanedName = String(productName || '').trim();
+  const cleanedUrl = String(canonicalUrl || '').trim();
+
+  if (cleanedName.length < 3 || !cleanedUrl || !cleanedUrl.includes('/ip/')) {
+    return;
+  }
+
+  if (price === null) {
+    return;
+  }
+
+  if (results.find(item => item.productName === cleanedName)) {
+    return;
+  }
+
+  results.push({
+    productName: cleanedName,
+    price,
+    productUrl: buildProductUrl(cleanedUrl, storeId)
+  });
+}
+
+function extractPriceFromObject(value) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  return parsePrice(
+    value?.priceInfo?.currentPrice?.price
+    || value?.priceInfo?.currentPrice?.priceString
+    || value?.currentPrice?.price
+    || value?.currentPrice?.priceString
+    || value?.secondaryOfferPrice?.currentPrice?.price
+    || value?.secondaryOfferPrice?.currentPrice?.priceString
+    || value?.primaryOffer?.offerPrice
+    || value?.price
+    || value?.priceString
+  );
+}
+
+function extractCandidatesDeep(data, storeId) {
+  const results = [];
+  const queue = [data];
+
+  while (queue.length && results.length < 12) {
+    const current = queue.shift();
+    if (!current || typeof current !== 'object') {
+      continue;
+    }
+
+    if (Array.isArray(current)) {
+      for (const entry of current) {
+        queue.push(entry);
+      }
+      continue;
+    }
+
+    const candidateName = current.name || current.productName || current.title;
+    const candidateUrl = current.canonicalUrl || current.productPageUrl || current.usItemId && `/ip/${current.usItemId}`;
+    const candidatePrice = extractPriceFromObject(current)
+      || extractPriceFromObject(current.product)
+      || extractPriceFromObject(current.item)
+      || extractPriceFromObject(current.item?.product);
+
+    if (candidateName && candidateUrl) {
+      collectCandidate(results, candidateName, candidatePrice, candidateUrl, storeId);
+    }
+
+    for (const value of Object.values(current)) {
+      if (value && typeof value === 'object') {
+        queue.push(value);
+      }
+    }
+  }
+
+  return results;
+}
+
 function extractCandidatesFromNextData(html, storeId) {
   const results = [];
   const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
@@ -73,6 +152,11 @@ function extractCandidatesFromNextData(html, storeId) {
 
   try {
     const data = JSON.parse(match[1]);
+    const deepResults = extractCandidatesDeep(data, storeId);
+    if (deepResults.length) {
+      console.log(`walmart-search: deep scan found ${deepResults.length} real products`);
+      return deepResults;
+    }
     
     // Try multiple possible paths in the data structure
     let stacks = data?.props?.pageProps?.initialData?.searchResult?.itemStacks;
@@ -107,20 +191,8 @@ function extractCandidatesFromNextData(html, storeId) {
         }
 
         const productName = String(product.name).trim();
-        const price = parsePrice(
-          product?.priceInfo?.currentPrice?.price
-          || product?.priceInfo?.currentPrice?.priceString
-          || product?.primaryOffer?.offerPrice
-        );
-        const productUrl = buildProductUrl(String(product.canonicalUrl), storeId);
-
-        if (productName.length < 3) {
-          continue;
-        }
-
-        if (!results.find(item => item.productName === productName)) {
-          results.push({ productName, price, productUrl });
-        }
+        const price = extractPriceFromObject(product);
+        collectCandidate(results, productName, price, String(product.canonicalUrl), storeId);
       }
     }
 
@@ -153,9 +225,7 @@ function extractCandidatesFallback(html, storeId) {
       continue;
     }
 
-    if (!looseResults.find(item => item.productName === productName)) {
-      looseResults.push({ productName, price, productUrl });
-    }
+    collectCandidate(looseResults, productName, price, canonicalUrl, storeId);
   }
 
   console.log(`walmart-search fallback: matched ${regexMatches} items via primary regex, captured ${looseResults.length} unique products`);
@@ -175,9 +245,7 @@ function extractCandidatesFallback(html, storeId) {
       const canonicalUrl = decodeEscaped(ultraMatch[2]);
       const productUrl = buildProductUrl(canonicalUrl, storeId);
 
-      if (productName && !looseResults.find(item => item.productName === productName)) {
-        looseResults.push({ productName, price: null, productUrl });
-      }
+      collectCandidate(looseResults, productName, null, canonicalUrl, storeId);
     }
     
     if (ultraMatches > 0) {
@@ -204,9 +272,7 @@ function extractCandidatesFallback(html, storeId) {
       
       if (nameMatch && nameMatch[1]) {
         const productName = decodeEscaped(nameMatch[1]);
-        if (!looseResults.find(item => item.productName === productName)) {
-          looseResults.push({ productName, price: null, productUrl });
-        }
+        collectCandidate(looseResults, productName, null, canonicalUrl, storeId);
       }
     }
     
@@ -232,16 +298,6 @@ function extractEffectiveStoreId(html) {
 
 function buildSearchUrl(query, storeId) {
   return `https://www.walmart.com/search?q=${encodeURIComponent(query)}&storeId=${encodeURIComponent(storeId)}`;
-}
-
-function buildFallbackSuggestion(query, storeId) {
-  const cleaned = String(query || '').trim();
-  const pretty = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-  return {
-    productName: `${pretty} (similar Walmart results)`,
-    price: null,
-    productUrl: buildSearchUrl(cleaned, storeId)
-  };
 }
 
 async function fetchAndParse(query, storeId) {
@@ -304,30 +360,8 @@ async function searchLocalWalmart(query, storeId) {
   console.log(`walmart-search: starting search for '${query}' at store ${storeId}`);
   
   const primary = await fetchAndParse(query, storeId);
-  
-  if (primary.items.length) {
-    console.log(`walmart-search: primary search succeeded with ${primary.items.length} items`);
-    return primary;
-  }
-
-  // Broad terms can be sparse in parsed payloads; retry with common retail intent suffixes.
-  console.log(`walmart-search: primary search returned no results, trying variants`);
-  const q = String(query || '').trim();
-  const retryQueries = [`${q} furniture`, `${q} desk`, `${q} set`];
-  for (const retryQuery of retryQueries) {
-    console.log(`walmart-search: retry attempt with '${retryQuery}'`);
-    const retried = await fetchAndParse(retryQuery, storeId);
-    if (retried.items.length) {
-      console.log(`walmart-search: retry succeeded with ${retried.items.length} items`);
-      return retried;
-    }
-  }
-
-  console.log(`walmart-search: all attempts failed, returning fallback suggestion`);
-  return {
-    items: [buildFallbackSuggestion(q, storeId)],
-    resolvedStoreId: primary.resolvedStoreId || storeId
-  };
+  console.log(`walmart-search: primary search finished with ${primary.items.length} real products`);
+  return primary;
 }
 
 exports.handler = async (event) => {
