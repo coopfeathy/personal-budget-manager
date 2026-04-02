@@ -979,7 +979,12 @@ export class AppComponent implements OnInit, OnDestroy {
     this.isWalmartLoading = true;
     this.walmartStatus = 'Checking Walmart prices...';
     const walmartToken = localStorage.getItem(this.tokenStorageKey);
-    if (!walmartToken) { this.signOut(); return; }
+    if (!walmartToken) {
+      this.walmartStatus = 'Session expired. Sign in again to refresh Walmart prices.';
+      this.isWalmartLoading = false;
+      this.signOut();
+      return;
+    }
     try {
       const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartListItem[]; message?: string }>('/api/walmart-prices', {
         items: this.walmartList
@@ -993,6 +998,11 @@ export class AppComponent implements OnInit, OnDestroy {
       this.walmartList = response.items;
       this.walmartStatus = 'Walmart list refreshed.';
     } catch (error: unknown) {
+      if (error instanceof HttpErrorResponse && error.status === 401) {
+        this.walmartStatus = 'Session expired. Sign in again to search Walmart.';
+        this.signOut();
+        return;
+      }
       this.walmartStatus = 'Walmart lookup failed. Try again in a moment.';
       console.error(error);
     } finally {
@@ -1005,7 +1015,9 @@ export class AppComponent implements OnInit, OnDestroy {
     const suggestToken = localStorage.getItem(this.tokenStorageKey);
     if (!suggestToken) {
       this.walmartSuggestions = [];
+      this.walmartStatus = 'Session expired. Sign in again to search Walmart.';
       this.isWalmartSuggesting = false;
+      this.signOut();
       return;
     }
     if (!this.preferredWalmartStoreId) {
@@ -1034,9 +1046,23 @@ export class AppComponent implements OnInit, OnDestroy {
           ? `Showing matches from Walmart store #${activeStoreId}.`
           : `Showing matches from Walmart store #${activeStoreId} (Walmart did not return inventory for #${this.preferredWalmartStoreId}).`)
         : `No matches found at Walmart store #${activeStoreId} for "${query}".`;
-    } catch {
+    } catch (error: unknown) {
+      if (error instanceof HttpErrorResponse) {
+        if (error.status === 401) {
+          this.walmartSuggestions = [];
+          this.walmartStatus = 'Session expired. Sign in again to search Walmart.';
+          this.signOut();
+          return;
+        }
+        if (error.status === 429) {
+          this.walmartSuggestions = [];
+          this.walmartStatus = 'Walmart is rate-limiting requests. Wait a moment and try again.';
+          return;
+        }
+      }
       this.walmartSuggestions = [];
       this.walmartStatus = 'Local Walmart search failed. Try again in a moment.';
+      console.error(error);
     } finally {
       this.isWalmartSuggesting = false;
     }
@@ -1054,7 +1080,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
     if (!token) {
       this.walmartBrowseResults = [];
+      this.walmartStatus = 'Session expired. Sign in again to browse Walmart.';
       this.isWalmartSuggesting = false;
+      this.signOut();
       return;
     }
 
@@ -1070,7 +1098,20 @@ export class AppComponent implements OnInit, OnDestroy {
       this.walmartStatus = this.walmartBrowseResults.length
         ? `Showing ${this.walmartBrowseResults.length} products from store #${activeStoreId}.`
         : `No products found in this category at store #${activeStoreId}.`;
-    } catch (error) {
+    } catch (error: unknown) {
+      if (error instanceof HttpErrorResponse) {
+        if (error.status === 401) {
+          this.walmartBrowseResults = [];
+          this.walmartStatus = 'Session expired. Sign in again to browse Walmart.';
+          this.signOut();
+          return;
+        }
+        if (error.status === 429) {
+          this.walmartBrowseResults = [];
+          this.walmartStatus = 'Walmart is rate-limiting requests. Wait a moment and try again.';
+          return;
+        }
+      }
       this.walmartBrowseResults = [];
       this.walmartStatus = 'Failed to load category products.';
       console.error(error);
@@ -1091,7 +1132,9 @@ export class AppComponent implements OnInit, OnDestroy {
     const token = localStorage.getItem(this.tokenStorageKey);
 
     if (!token) {
+      this.walmartStatus = 'Session expired. Sign in again to browse Walmart.';
       this.isLoadingFullCatalog = false;
+      this.signOut();
       return;
     }
 
@@ -1129,7 +1172,20 @@ export class AppComponent implements OnInit, OnDestroy {
 
       this.walmartFullCatalog = Array.from(allProducts.values());
       this.walmartStatus = `Showing ${this.walmartFullCatalog.length} products from store #${this.preferredWalmartStoreId}. Browse and click Add to build your shopping list.`;
-    } catch (error) {
+    } catch (error: unknown) {
+      if (error instanceof HttpErrorResponse) {
+        if (error.status === 401) {
+          this.walmartFullCatalog = [];
+          this.walmartStatus = 'Session expired. Sign in again to browse Walmart.';
+          this.signOut();
+          return;
+        }
+        if (error.status === 429) {
+          this.walmartFullCatalog = [];
+          this.walmartStatus = 'Walmart is rate-limiting requests. Wait a moment and try again.';
+          return;
+        }
+      }
       this.walmartFullCatalog = [];
       this.walmartStatus = 'Failed to load full catalog.';
       console.error(error);
