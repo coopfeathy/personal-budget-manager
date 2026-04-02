@@ -1093,7 +1093,13 @@ export class AppComponent implements OnInit, OnDestroy {
         { headers: { Authorization: `Bearer ${token}` } }
       ));
 
-      this.walmartBrowseResults = response.ok ? (response.items || []) : [];
+      if (!response.ok) {
+        this.walmartBrowseResults = [];
+        this.walmartStatus = response.message || 'Walmart category search failed.';
+        return;
+      }
+
+      this.walmartBrowseResults = response.items || [];
       const activeStoreId = response.resolvedStoreId || this.preferredWalmartStoreId;
       this.walmartStatus = this.walmartBrowseResults.length
         ? `Showing ${this.walmartBrowseResults.length} products from store #${activeStoreId}.`
@@ -1154,13 +1160,19 @@ export class AppComponent implements OnInit, OnDestroy {
 
     try {
       for (const category of categories) {
-        const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartSuggestionItem[] }>(
+        const response = await firstValueFrom(this.http.post<{ ok: boolean; items: WalmartSuggestionItem[]; message?: string }>(
           '/api/walmart-search',
           { query: category.query, storeId: this.preferredWalmartStoreId },
           { headers: { Authorization: `Bearer ${token}` } }
         ));
 
-        if (response.ok && response.items) {
+        if (!response.ok) {
+          this.walmartFullCatalog = [];
+          this.walmartStatus = response.message || 'Walmart catalog load failed.';
+          return;
+        }
+
+        if (response.items) {
           for (const item of response.items) {
             // Use product name as key to avoid duplicates
             allProducts.set(item.productName, item);
