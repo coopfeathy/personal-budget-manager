@@ -1833,6 +1833,11 @@ export class AppComponent implements OnInit, OnDestroy {
         : 'No server state yet. Your first save will create it.';
       this.isDirty = false;
     } catch (error: unknown) {
+      if (error instanceof HttpErrorResponse && error.status >= 500) {
+        this.saveStatus = 'Cloud state service is temporarily unavailable (server error). You can keep using Walmart and dashboard tools, but state sync is paused.';
+        return;
+      }
+
       this.saveStatus = 'Authenticated, but failed to load server state.';
       console.error(error);
     }
