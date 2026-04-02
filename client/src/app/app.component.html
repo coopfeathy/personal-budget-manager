@@ -868,6 +868,9 @@
         </div>
 
         <!-- Grocery List -->
+        <div class="panel-head mt-s">
+          <h3>Your Grocery List</h3>
+        </div>
         <div class="stack mt-s" *ngIf="walmartList.length > 0; else noWalmartItems">
           <div class="row" *ngFor="let item of walmartList">
             <div class="row-left">
@@ -884,7 +887,12 @@
           </div>
         </div>
         <ng-template #noWalmartItems>
-          <div class="empty-state">&#128722;<p>No Walmart items yet</p></div>
+          <div class="empty-state" *ngIf="walmartBrowseResults.length > 0 || walmartFullCatalog.length > 0; else walmartListEmptyState">
+            <p>Browse results are shown above. Click <strong>+ Add</strong> on a product to put it in your grocery list.</p>
+          </div>
+          <ng-template #walmartListEmptyState>
+            <div class="empty-state">&#128722;<p>No Walmart items yet</p></div>
+          </ng-template>
         </ng-template>
       </section>
     </ng-template>

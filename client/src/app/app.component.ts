@@ -1231,6 +1231,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
     this.walmartList = [listItem, ...this.walmartList];
     this.walmartStatus = `Added "${product.productName}" to your grocery list.`;
+    this.markDirty();
   }
 
   async saveState(): Promise<void> {

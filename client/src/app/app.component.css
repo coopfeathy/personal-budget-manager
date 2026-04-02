@@ -264,6 +264,11 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 .full-col { grid-column: 1 / -1; }
 .stack { display: grid; gap: 10px; }
 .mt-s { margin-top: 10px; }
+.panel-head h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  color: #cbd5e1;
+}
 .mt   { margin-top: 14px; }
 .positive { color: #34d399; font-weight: 600; }
 .negative { color: #f87171; font-weight: 600; }
