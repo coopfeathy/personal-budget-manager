@@ -301,59 +301,75 @@ function buildSearchUrl(query, storeId) {
 }
 
 function buildStoreSearchUrl(query, storeId) {
-  return `https://www.walmart.com/store/${encodeURIComponent(storeId)}/search?query=${encodeURIComponent(query)}`;
+  return `https://www.walmart.com/store/${encodeURIComponent(storeId)}/search?query=${encodeURIComponent(query)}&affinityOverride=store_assortment`;
+}
+
+// Fetches a Walmart search page, routing through ScraperAPI when SCRAPER_API_KEY is set.
+// ScraperAPI (free at scraperapi.com, 1000 calls/month) provides real residential IPs that
+// bypass Walmart's bot detection, which blocks cloud-provider server IPs like Netlify's.
+async function fetchHtmlForSearch(targetUrl, storeId) {
+  const apiKey = process.env.SCRAPER_API_KEY;
+
+  if (apiKey) {
+    const proxyUrl = 'https://api.scraperapi.com/?' + new URLSearchParams({
+      api_key: apiKey,
+      url: targetUrl,
+      country_code: 'us'
+    }).toString();
+    console.log(`walmart-search: using ScraperAPI proxy for ${targetUrl}`);
+    const response = await fetch(proxyUrl, { headers: { Accept: 'text/html,application/xhtml+xml' } });
+    if (!response.ok) {
+      console.log(`walmart-search: ScraperAPI returned ${response.status}`);
+      return null;
+    }
+    return response.text();
+  }
+
+  // No API key — direct fetch (likely blocked by Walmart bot detection from cloud IPs)
+  const response = await fetch(targetUrl, {
+    method: 'GET',
+    headers: {
+      ...WALMART_HEADERS,
+      Cookie: `xptc=assortmentStoreId%2B${encodeURIComponent(storeId)}; assortmentStoreId=${encodeURIComponent(storeId)}`,
+      Referer: `https://www.walmart.com/store/${encodeURIComponent(storeId)}`,
+      Origin: 'https://www.walmart.com'
+    }
+  });
+  if (!response.ok) return null;
+  return response.text();
 }
 
 async function fetchAndParse(query, storeId) {
-  // Try both the standard search URL and the store-specific search URL
-  const urls = [
-    buildStoreSearchUrl(query, storeId),
-    buildSearchUrl(query, storeId)
-  ];
+  const urls = [buildStoreSearchUrl(query, storeId), buildSearchUrl(query, storeId)];
+  const usingProxy = !!process.env.SCRAPER_API_KEY;
 
   for (const url of urls) {
-    console.log(`walmart-search: fetching '${query}' for store ${storeId} from ${url}`);
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        ...WALMART_HEADERS,
-        Cookie: `CID=d9da0a13-cdf3-4183-8e3e-9f7a7e76c0bb; xptc=assortmentStoreId%2B${encodeURIComponent(storeId)}; assortmentStoreId=${encodeURIComponent(storeId)}`,
-        Referer: `https://www.walmart.com/store/${encodeURIComponent(storeId)}`,
-        Origin: 'https://www.walmart.com'
-      }
-    });
-
-    console.log(`walmart-search: got response status ${response.status} from ${url}`);
-    if (!response.ok) {
-      continue;
-    }
-
-    const html = await response.text();
-    const htmlSize = html.length;
-    console.log(`walmart-search: received ${htmlSize} bytes`);
+    console.log(`walmart-search: fetching '${query}' store=${storeId} proxy=${usingProxy}`);
+    const html = await fetchHtmlForSearch(url, storeId);
+    if (!html || html.length < 5000) continue;
 
     const hasNextData = html.includes('__NEXT_DATA__');
     const hasCanonicalUrl = html.includes('"canonicalUrl"');
-    console.log(`walmart-search: nextData=${hasNextData}, canonicalUrl=${hasCanonicalUrl}, url=${url}`);
+    console.log(`walmart-search: bytes=${html.length} nextData=${hasNextData} canonicalUrl=${hasCanonicalUrl}`);
 
-    if (htmlSize < 5000 || (!hasNextData && !hasCanonicalUrl)) {
-      console.log('walmart-search: response too small or no product markers, trying next URL');
+    if (!hasNextData && !hasCanonicalUrl) {
+      console.log('walmart-search: no product markers in response (bot challenge page?), skipping');
       continue;
     }
 
     const resolvedStoreId = extractEffectiveStoreId(html) || storeId;
     const fromNextData = extractCandidatesFromNextData(html, storeId);
-    console.log(`walmart-search: extracted ${fromNextData.length} items from __NEXT_DATA__`);
     const items = fromNextData.length ? fromNextData : extractCandidatesFallback(html, storeId);
-    console.log(`walmart-search: final result: ${items.length} items`);
+    console.log(`walmart-search: final=${items.length} items`);
 
-    if (items.length) {
-      return { items, resolvedStoreId };
-    }
+    if (items.length) return { items, resolvedStoreId };
   }
 
-  console.log('walmart-search: all URL attempts returned 0 items');
-  return { items: [], resolvedStoreId: storeId };
+  const message = usingProxy
+    ? 'No products found. Try a different search term or category.'
+    : 'Walmart search is blocked from this server. Add a free SCRAPER_API_KEY to your Netlify environment variables to enable product search.';
+  console.log(`walmart-search: 0 items — ${message}`);
+  return { items: [], resolvedStoreId: storeId, message };
 }
 
 async function searchLocalWalmart(query, storeId) {
@@ -397,8 +413,8 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { items, resolvedStoreId } = await searchLocalWalmart(query, storeId);
-    return json(200, { ok: true, items, resolvedStoreId });
+    const { items, resolvedStoreId, message } = await searchLocalWalmart(query, storeId);
+    return json(200, { ok: true, items, resolvedStoreId, ...(message ? { message } : {}) });
   } catch (error) {
     console.error('walmart-search error', error);
     return json(500, { ok: false, message: 'Unable to search your local Walmart right now.' });

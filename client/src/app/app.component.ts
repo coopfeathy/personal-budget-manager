@@ -1041,11 +1041,13 @@ export class AppComponent implements OnInit, OnDestroy {
 
       this.walmartSuggestions = response.items || [];
       const activeStoreId = response.resolvedStoreId || this.preferredWalmartStoreId;
-      this.walmartStatus = this.walmartSuggestions.length
-        ? (activeStoreId === this.preferredWalmartStoreId
+      if (this.walmartSuggestions.length) {
+        this.walmartStatus = activeStoreId === this.preferredWalmartStoreId
           ? `Showing matches from Walmart store #${activeStoreId}.`
-          : `Showing matches from Walmart store #${activeStoreId} (Walmart did not return inventory for #${this.preferredWalmartStoreId}).`)
-        : `No matches found at Walmart store #${activeStoreId} for "${query}".`;
+          : `Showing matches from Walmart store #${activeStoreId} (Walmart did not return inventory for #${this.preferredWalmartStoreId}).`;
+      } else {
+        this.walmartStatus = response.message || `No matches found at Walmart store #${activeStoreId} for "${query}".`;
+      }
     } catch (error: unknown) {
       if (error instanceof HttpErrorResponse) {
         if (error.status === 401) {
@@ -1103,7 +1105,7 @@ export class AppComponent implements OnInit, OnDestroy {
       const activeStoreId = response.resolvedStoreId || this.preferredWalmartStoreId;
       this.walmartStatus = this.walmartBrowseResults.length
         ? `Showing ${this.walmartBrowseResults.length} products from store #${activeStoreId}.`
-        : `No products found in this category at store #${activeStoreId}.`;
+        : (response.message || `No products found in this category at store #${activeStoreId}.`);
     } catch (error: unknown) {
       if (error instanceof HttpErrorResponse) {
         if (error.status === 401) {
