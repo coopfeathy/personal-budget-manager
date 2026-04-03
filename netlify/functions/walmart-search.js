@@ -23,16 +23,20 @@ function getAuthorizedEmail(event) {
 }
 
 const WALMART_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
   'Accept-Language': 'en-US,en;q=0.9',
   'Accept-Encoding': 'gzip, deflate, br',
-  'Cache-Control': 'no-cache',
-  'Pragma': 'no-cache',
+  'Cache-Control': 'max-age=0',
+  'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"macOS"',
   'Sec-Fetch-Dest': 'document',
   'Sec-Fetch-Mode': 'navigate',
   'Sec-Fetch-Site': 'none',
-  'Upgrade-Insecure-Requests': '1'
+  'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1',
+  'DNT': '1'
 };
 
 function parsePrice(value) {
@@ -71,17 +75,13 @@ function collectCandidate(results, productName, price, canonicalUrl, storeId) {
     return;
   }
 
-  if (price === null) {
-    return;
-  }
-
   if (results.find(item => item.productName === cleanedName)) {
     return;
   }
 
   results.push({
     productName: cleanedName,
-    price,
+    price,  // null shows as 'Check store' in the UI
     productUrl: buildProductUrl(cleanedUrl, storeId)
   });
 }
@@ -300,60 +300,60 @@ function buildSearchUrl(query, storeId) {
   return `https://www.walmart.com/search?q=${encodeURIComponent(query)}&storeId=${encodeURIComponent(storeId)}`;
 }
 
+function buildStoreSearchUrl(query, storeId) {
+  return `https://www.walmart.com/store/${encodeURIComponent(storeId)}/search?query=${encodeURIComponent(query)}`;
+}
+
 async function fetchAndParse(query, storeId) {
-  const url = buildSearchUrl(query, storeId);
-  console.log(`walmart-search: fetching '${query}' for store ${storeId} from ${url}`);
-  
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      ...WALMART_HEADERS,
-      Cookie: `xptc=assortmentStoreId%2B${encodeURIComponent(storeId)}`,
-      Referer: `https://www.walmart.com/store/${encodeURIComponent(storeId)}`
+  // Try both the standard search URL and the store-specific search URL
+  const urls = [
+    buildStoreSearchUrl(query, storeId),
+    buildSearchUrl(query, storeId)
+  ];
+
+  for (const url of urls) {
+    console.log(`walmart-search: fetching '${query}' for store ${storeId} from ${url}`);
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...WALMART_HEADERS,
+        Cookie: `CID=d9da0a13-cdf3-4183-8e3e-9f7a7e76c0bb; xptc=assortmentStoreId%2B${encodeURIComponent(storeId)}; assortmentStoreId=${encodeURIComponent(storeId)}`,
+        Referer: `https://www.walmart.com/store/${encodeURIComponent(storeId)}`,
+        Origin: 'https://www.walmart.com'
+      }
+    });
+
+    console.log(`walmart-search: got response status ${response.status} from ${url}`);
+    if (!response.ok) {
+      continue;
     }
-  });
 
-  console.log(`walmart-search: got response status ${response.status}`);
+    const html = await response.text();
+    const htmlSize = html.length;
+    console.log(`walmart-search: received ${htmlSize} bytes`);
 
-  if (!response.ok) {
-    console.log(`walmart-search: response not ok (${response.status}), treating as empty`);
-    return { items: [], resolvedStoreId: storeId };
+    const hasNextData = html.includes('__NEXT_DATA__');
+    const hasCanonicalUrl = html.includes('"canonicalUrl"');
+    console.log(`walmart-search: nextData=${hasNextData}, canonicalUrl=${hasCanonicalUrl}, url=${url}`);
+
+    if (htmlSize < 5000 || (!hasNextData && !hasCanonicalUrl)) {
+      console.log('walmart-search: response too small or no product markers, trying next URL');
+      continue;
+    }
+
+    const resolvedStoreId = extractEffectiveStoreId(html) || storeId;
+    const fromNextData = extractCandidatesFromNextData(html, storeId);
+    console.log(`walmart-search: extracted ${fromNextData.length} items from __NEXT_DATA__`);
+    const items = fromNextData.length ? fromNextData : extractCandidatesFallback(html, storeId);
+    console.log(`walmart-search: final result: ${items.length} items`);
+
+    if (items.length) {
+      return { items, resolvedStoreId };
+    }
   }
 
-  const html = await response.text();
-  const htmlSize = html.length;
-  console.log(`walmart-search: received ${htmlSize} bytes`);
-  
-  // Check if response has meaningful content
-  if (htmlSize < 5000) {
-    console.log(`walmart-search: WARNING - response is very small (${htmlSize} bytes), likely not a real search result page`);
-  }
-  
-  // Detailed content detection
-  const hasNextData = html.includes('__NEXT_DATA__');
-  const hasProductName = html.includes('"name":"');
-  const hasCanonicalUrl = html.includes('"canonicalUrl":"');
-  const hasPrice = html.includes('"priceString"') || html.includes('"price"');
-  const hasProductPattern = html.includes('"item":{"product":');
-  
-  console.log(`walmart-search: response analysis - nextData=${hasNextData}, productName=${hasProductName}, canonicalUrl=${hasCanonicalUrl}, price=${hasPrice}, productPattern=${hasProductPattern}`);
-  
-  // Log a sample of the response to help debug
-  if (htmlSize > 0) {
-    const sample = html.substring(0, 500);
-    console.log(`walmart-search: response starts with: ${sample.substring(0, 200)}`);
-  }
-  
-  const resolvedStoreId = extractEffectiveStoreId(html) || storeId;
-  console.log(`walmart-search: resolved store ID to ${resolvedStoreId}`);
-  
-  const fromNextData = extractCandidatesFromNextData(html, storeId);
-  console.log(`walmart-search: extracted ${fromNextData.length} items from __NEXT_DATA__`);
-  
-  const items = fromNextData.length ? fromNextData : extractCandidatesFallback(html, storeId);
-  console.log(`walmart-search: final result: ${items.length} items${items.length > 0 ? ': ' + items.map(i => i.productName).join(', ').substring(0, 100) : ''}`);
-  
-  return { items, resolvedStoreId };
+  console.log('walmart-search: all URL attempts returned 0 items');
+  return { items: [], resolvedStoreId: storeId };
 }
 
 async function searchLocalWalmart(query, storeId) {
